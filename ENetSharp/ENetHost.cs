@@ -14,6 +14,7 @@ namespace ENetSharp
     public class ENetHost : IDisposable
     {
         internal const ushort PROTOCOL_HEADER_FLAG_MASK = 0x2980;
+        internal const ushort PROTOCOL_HEADER_FLAG_SENT_TIME = 0x80;
         internal const int PROTOCOL_MAXIMUM_PEER_ID = 0x007F;
 
         private UdpClient connection;
@@ -67,76 +68,102 @@ namespace ENetSharp
                 {
                     peer = Peers[header.PeerID];
                     if (peer.Value.State == ENetPeerState.DISCONNECTED || 
-                        peer.Value.State == ENetPeerState.ZOMBIE || 
-                        peer.Value.Address != fromAddr /* && peer.Value.Address != ENET_HOST_BROADCAST */) //Figure out why ENET_HOST_BROADCAST is needed
+                        peer.Value.State == ENetPeerState.ZOMBIE ||
+                        //Don't include ENET_HOST_BROADCAST, it's meant for clients broadcasting the connect packet and communicating with any server that responds
+                        peer.Value.Address != fromAddr /* && peer.Value.Address != ENET_HOST_BROADCAST */)
                     {
-                        return; //The peer is disconnected, dead or the packets origin doesn't match the peer - Ignore them
+                        goto finalPacket; //The peer is disconnected, dead or the packets origin doesn't match the peer - Ignore them
                     }
                 }
                 catch (KeyNotFoundException)
                 {
-                    return; //Ignore the data as the client doesn't exist and this doesn't follow connection protocol - Ignore them
+                    goto finalPacket; //The client doesn't exist and this doesn't follow connection protocol - Ignore them
                 }
             }
-            int currentDataOffset = ((flag & 0x80) != 0) ? sizeof(ENetProtocolHeader) : 2; //sentTime is 2 bytes from the start of the header
+            int currentDataOffset = ((flag & PROTOCOL_HEADER_FLAG_SENT_TIME) != 0) ? sizeof(ENetProtocolHeader) : sizeof(ENetProtocolHeader) - 2; //sentTime is 2 bytes
             while (currentDataOffset < data.Length)
             {
                 ENetProtocol packet = (ENetProtocol)Marshal.PtrToStructure(dataStart + currentDataOffset, typeof(ENetProtocol));
-                packet.Header.ReliableSequenceNumber = (ushort)IPAddress.NetworkToHostOrder(unchecked((Int16)packet.Header.ReliableSequenceNumber));
-                if (peer == null && (ENetCommand)(packet.Header.Command & (byte)ENetCommand.ENET_PROTOCOL_COMMAND_MASK) != ENetCommand.ENET_PROTOCOL_COMMAND_CONNECT) return; //Peer was following connection protocol but didn't send the connect first
-                switch ((ENetCommand)(packet.Header.Command & (byte)ENetCommand.ENET_PROTOCOL_COMMAND_MASK))
+                ToHostOrder(ref packet.Header.ReliableSequenceNumber);
+                ENetCommand command = (ENetCommand)(packet.Header.Command & (byte)ENetCommand.ENET_PROTOCOL_COMMAND_MASK);
+                if(command >= ENetCommand.ENET_PROTOCOL_COMMAND_COUNT) continue;
+                if (peer == null && command != ENetCommand.ENET_PROTOCOL_COMMAND_CONNECT) return; //Peer was following connection protocol but didn't send the connect first
+                currentDataOffset += command.Size();
+                if (currentDataOffset > data.Length) return; //The ENetCommand is larger than the remaining data
+                switch (command)
                 {
                     case ENetCommand.ENET_PROTOCOL_COMMAND_ACKNOWLEDGE:
+                        ToHostOrder(ref packet.Acknowledge.ReceivedReliableSequenceNumber);
+                        ToHostOrder(ref packet.Acknowledge.ReceivedSentTime);
                         //TODO: Handle Acknowledge
-                        currentDataOffset += sizeof(ENetProtocolAcknowledge);
                         break;
                     case ENetCommand.ENET_PROTOCOL_COMMAND_BANDWIDTH_LIMIT:
+                        ToHostOrder(ref packet.BandwidthLimit.IncomingBandwidth);
+                        ToHostOrder(ref packet.BandwidthLimit.OutgoingBandwidth);
                         //TODO: Handle Bandwidth Limit
-                        currentDataOffset += sizeof(ENetProtocolBandwidthLimit);
                         break;
                     case ENetCommand.ENET_PROTOCOL_COMMAND_CONNECT:
+                        ToHostOrder(ref packet.Connect.MTU);
+                        ToHostOrder(ref packet.Connect.WindowSize);
+                        ToHostOrder(ref packet.Connect.ChannelCount);
+                        ToHostOrder(ref packet.Connect.IncomingBandwidth);
+                        ToHostOrder(ref packet.Connect.OutgoingBandwidth);
+                        ToHostOrder(ref packet.Connect.PacketThrottleInterval);
+                        ToHostOrder(ref packet.Connect.PacketThrottleAcceleration);
+                        ToHostOrder(ref packet.Connect.PacketThrottleDeceleration);
+                        ToHostOrder(ref packet.Connect.SessionID);
                         //TODO: Handle Connect
-                        currentDataOffset += sizeof(ENetProtocolConnect);
                         break;
                     case ENetCommand.ENET_PROTOCOL_COMMAND_DISCONNECT:
+                        ToHostOrder(ref packet.Disconnect.Data);
                         //TODO: Handle Disconnect
-                        currentDataOffset += sizeof(ENetProtocolDisconnect);
                         break;
                     case ENetCommand.ENET_PROTOCOL_COMMAND_PING:
                         //TODO: Handle Ping
-                        currentDataOffset += sizeof(ENetProtocolPing);
                         break;
                     case ENetCommand.ENET_PROTOCOL_COMMAND_SEND_FRAGMENT:
-                        //TODO: Handle Send Fragment
-                        packet.SendFragment.DataLength = (ushort)IPAddress.NetworkToHostOrder(unchecked((Int16)packet.SendFragment.DataLength));
-                        currentDataOffset += sizeof(ENetProtocolSendFragment);
+                        ToHostOrder(ref packet.SendFragment.StartSequenceNumber);
+                        ToHostOrder(ref packet.SendFragment.DataLength);
+                        ToHostOrder(ref packet.SendFragment.FragmentCount);
+                        ToHostOrder(ref packet.SendFragment.FragmentNumber);
+                        ToHostOrder(ref packet.SendFragment.TotalLength);
+                        ToHostOrder(ref packet.SendFragment.FragmentOffset);
                         currentDataOffset += packet.SendFragment.DataLength;
+                        //TODO: Handle Send Fragment
                         break;
                     case ENetCommand.ENET_PROTOCOL_COMMAND_SEND_RELIABLE:
+                        ToHostOrder(ref packet.SendReliable.DataLength);
                         //TODO: Handle Send Reliable
-                        packet.SendReliable.DataLength = (ushort)IPAddress.NetworkToHostOrder(unchecked((Int16)packet.SendReliable.DataLength));
-                        currentDataOffset += sizeof(ENetProtocolSendReliable);
                         currentDataOffset += packet.SendReliable.DataLength;
                         break;
                     case ENetCommand.ENET_PROTOCOL_COMMAND_SEND_UNRELIABLE:
-                        //TODO: Handle Send Unreliable
-                        packet.SendUnreliable.DataLength = (ushort)IPAddress.NetworkToHostOrder(unchecked((Int16)packet.SendUnreliable.DataLength));
-                        currentDataOffset += sizeof(ENetProtocolSendUnreliable);
+                        ToHostOrder(ref packet.SendUnreliable.UnreliableSequenceNumber);
+                        ToHostOrder(ref packet.SendUnreliable.DataLength);
                         currentDataOffset += packet.SendUnreliable.DataLength;
+                        //TODO: Handle Send Unreliable
                         break;
                     case ENetCommand.ENET_PROTOCOL_COMMAND_SEND_UNSEQUENCED:
-                        //TODO: Handle Send Unsequenced
-                        packet.SendUnsequenced.DataLength = (ushort)IPAddress.NetworkToHostOrder(unchecked((Int16)packet.SendUnsequenced.DataLength));
-                        currentDataOffset += sizeof(ENetProtocolSendUnsequenced);
+                        ToHostOrder(ref packet.SendUnsequenced.UnsequencedGroup);
+                        ToHostOrder(ref packet.SendUnsequenced.DataLength);
                         currentDataOffset += packet.SendUnsequenced.DataLength;
+                        //TODO: Handle Send Unsequenced
                         break;
                     case ENetCommand.ENET_PROTOCOL_COMMAND_THROTTLE_CONFIGURE:
+                        ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleInterval);
+                        ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleAcceleration);
+                        ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleDeceleration);
                         //TODO: Handle Throttle Configure
-                        currentDataOffset += sizeof(ENetProtocolThrottleConfigure);
                         break;
                     case ENetCommand.ENET_PROTOCOL_COMMAND_VERIFY_CONNECT:
+                        ToHostOrder(ref packet.VerifyConnect.MTU);
+                        ToHostOrder(ref packet.VerifyConnect.WindowSize);
+                        ToHostOrder(ref packet.VerifyConnect.ChannelCount);
+                        ToHostOrder(ref packet.VerifyConnect.IncomingBandwidth);
+                        ToHostOrder(ref packet.VerifyConnect.OutgoingBandwidth);
+                        ToHostOrder(ref packet.VerifyConnect.PacketThrottleInterval);
+                        ToHostOrder(ref packet.VerifyConnect.PacketThrottleAcceleration);
+                        ToHostOrder(ref packet.VerifyConnect.PacketThrottleDeceleration);
                         //TODO: Handle Verify Connect
-                        currentDataOffset += sizeof(ENetProtocolVerifyConnect);
                         break;
                     default:
                         goto finalPacket;
@@ -147,6 +174,16 @@ namespace ENetSharp
             #endregion
 
             if (shuttingDown) shutdownComplete.Set();
+        }
+
+        internal void ToHostOrder(ref ushort data)
+        {
+            data = (ushort)IPAddress.NetworkToHostOrder(unchecked((Int16)data));
+        }
+
+        internal void ToHostOrder(ref uint data)
+        {
+            data = (uint)IPAddress.NetworkToHostOrder(unchecked((Int32)data));
         }
     }
 }

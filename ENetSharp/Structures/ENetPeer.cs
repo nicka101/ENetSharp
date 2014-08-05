@@ -16,12 +16,12 @@ namespace ENetSharp.Structures
         public IPEndPoint Address;            /**< Internet address of the peer */
         public ENetPeerState State;
         internal List<ENetChannel> Channels;
-        internal uint IncomingBandwidth;  /**< Downstream bandwidth of the client in bytes/second */
-        internal uint OutgoingBandwidth;  /**< Upstream bandwidth of the client in bytes/second */
-        internal uint IncomingBandwidthThrottleEpoch;
-        internal uint OutgoingBandwidthThrottleEpoch;
-        internal uint IncomingDataTotal;
-        internal uint OutgoingDataTotal;
+        //internal uint IncomingBandwidth;  /**< Downstream bandwidth of the client in bytes/second */
+        //internal uint OutgoingBandwidth;  /**< Upstream bandwidth of the client in bytes/second */
+        //internal uint IncomingBandwidthThrottleEpoch;
+        //internal uint OutgoingBandwidthThrottleEpoch;
+        //internal uint IncomingDataTotal;
+        //internal uint OutgoingDataTotal;
         internal uint LastSendTime;
         internal uint LastReceiveTime;
         internal uint NextTimeout;
@@ -31,14 +31,14 @@ namespace ENetSharp.Structures
         internal uint PacketsLost;
         internal uint PacketLoss;          /**< mean packet loss of reliable packets as a ratio with respect to the constant ENET_PEER_PACKET_LOSS_SCALE */
         internal uint PacketLossVariance;
-        internal uint PacketThrottle;
-        internal uint PacketThrottleLimit;
-        internal uint PacketThrottleCounter;
-        internal uint PacketThrottleEpoch;
-        internal uint PacketThrottleAcceleration;
-        internal uint PacketThrottleDeceleration;
-        internal uint PacketThrottleInterval;
-        internal uint LastRoundTripTime;
+        //internal uint PacketThrottle;
+        //internal uint PacketThrottleLimit;
+        //internal uint PacketThrottleCounter;
+        //internal uint PacketThrottleEpoch;
+        //internal uint PacketThrottleAcceleration;
+        //internal uint PacketThrottleDeceleration;
+        //internal uint PacketThrottleInterval;
+        //internal uint LastRoundTripTime;
         internal uint LowestRoundTripTime;
         internal uint LastRoundTripTimeVariance;
         internal uint HighestRoundTripTimeVariance;
