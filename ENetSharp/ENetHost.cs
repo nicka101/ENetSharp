@@ -13,9 +13,14 @@ namespace ENetSharp
 {
     public class ENetHost : IDisposable
     {
+        internal const ushort PROTOCOL_HEADER_FLAG_MASK = 0x2980;
+        internal const int PROTOCOL_MAXIMUM_PEER_ID = 0x007F;
+
         private UdpClient connection;
         private bool shuttingDown = false;
         private ManualResetEventSlim shutdownComplete = new ManualResetEventSlim(false);
+        private readonly int PeerCount;
+        private Dictionary<ushort, ENetPeer> Peers;
 
         public delegate void ConnectHandler(ENetPeer peer);
         public delegate void DisconnectHandler(ENetPeer peer);
@@ -41,7 +46,7 @@ namespace ENetSharp
             shutdownComplete.Wait();
         }
 
-        private unsafe void ReceiveDatagram(IAsyncResult ar)
+        internal unsafe void ReceiveDatagram(IAsyncResult ar)
         {
             IPEndPoint fromAddr = new IPEndPoint(IPAddress.Any, 0);
             byte[] data = connection.EndReceive(ar, ref fromAddr);
@@ -52,11 +57,33 @@ namespace ENetSharp
             IntPtr dataStart = handle.AddrOfPinnedObject();
             ENetProtocolHeader header = (ENetProtocolHeader)Marshal.PtrToStructure(dataStart, typeof(ENetProtocolHeader));
             header.PeerID = (ushort)IPAddress.NetworkToHostOrder(unchecked((Int16)header.PeerID));
-            int currentDataOffset = ((header.Flag & 0x80) != 0) ? sizeof(ENetProtocolHeader) : 2; //sentTime is 2 bytes from the start of the header
+            ushort flag = (ushort)(header.PeerID & PROTOCOL_HEADER_FLAG_MASK);
+            header.PeerID &= unchecked((ushort)~(uint)PROTOCOL_HEADER_FLAG_MASK);
+
+            Nullable<ENetPeer> peer = null;
+            if (header.PeerID != PROTOCOL_MAXIMUM_PEER_ID) //peer remains null if the first command is expected to be a connect
+            {
+                try
+                {
+                    peer = Peers[header.PeerID];
+                    if (peer.Value.State == ENetPeerState.DISCONNECTED || 
+                        peer.Value.State == ENetPeerState.ZOMBIE || 
+                        peer.Value.Address != fromAddr /* && peer.Value.Address != ENET_HOST_BROADCAST */) //Figure out why ENET_HOST_BROADCAST is needed
+                    {
+                        return; //The peer is disconnected, dead or the packets origin doesn't match the peer - Ignore them
+                    }
+                }
+                catch (KeyNotFoundException)
+                {
+                    return; //Ignore the data as the client doesn't exist and this doesn't follow connection protocol - Ignore them
+                }
+            }
+            int currentDataOffset = ((flag & 0x80) != 0) ? sizeof(ENetProtocolHeader) : 2; //sentTime is 2 bytes from the start of the header
             while (currentDataOffset < data.Length)
             {
                 ENetProtocol packet = (ENetProtocol)Marshal.PtrToStructure(dataStart + currentDataOffset, typeof(ENetProtocol));
                 packet.Header.ReliableSequenceNumber = (ushort)IPAddress.NetworkToHostOrder(unchecked((Int16)packet.Header.ReliableSequenceNumber));
+                if (peer == null && (ENetCommand)(packet.Header.Command & (byte)ENetCommand.ENET_PROTOCOL_COMMAND_MASK) != ENetCommand.ENET_PROTOCOL_COMMAND_CONNECT) return; //Peer was following connection protocol but didn't send the connect first
                 switch ((ENetCommand)(packet.Header.Command & (byte)ENetCommand.ENET_PROTOCOL_COMMAND_MASK))
                 {
                     case ENetCommand.ENET_PROTOCOL_COMMAND_ACKNOWLEDGE:
