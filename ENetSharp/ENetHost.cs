@@ -1,7 +1,7 @@
 ﻿using ENetSharp.Internal.Structures;
 using ENetSharp.Structures;
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -15,13 +15,15 @@ namespace ENetSharp
     {
         internal const ushort PROTOCOL_HEADER_FLAG_MASK = 0x2980;
         internal const ushort PROTOCOL_HEADER_FLAG_SENT_TIME = 0x80;
+        internal const byte PROTOCOL_MINIMUM_CHANNEL_COUNT = 1;
+        internal const byte PROTOCOL_MAXIMUM_CHANNEL_COUNT = 255;
         internal const int PROTOCOL_MAXIMUM_PEER_ID = 0x007F;
 
         private UdpClient connection;
         private bool shuttingDown = false;
         private ManualResetEventSlim shutdownComplete = new ManualResetEventSlim(false);
         private readonly int PeerCount;
-        private Dictionary<ushort, ENetPeer> Peers;
+        private ConcurrentDictionary<ushort, ENetPeer> Peers;
 
         public delegate void ConnectHandler(ENetPeer peer);
         public delegate void DisconnectHandler(ENetPeer peer);
@@ -53,7 +55,7 @@ namespace ENetSharp
             byte[] data = connection.EndReceive(ar, ref fromAddr);
             if (!shuttingDown) connection.BeginReceive(ReceiveDatagram, null);
 
-            #region "ENet Parsing"
+            #region "ENet Structure Handling"
             var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
             IntPtr dataStart = handle.AddrOfPinnedObject();
             ENetProtocolHeader header = (ENetProtocolHeader)Marshal.PtrToStructure(dataStart, typeof(ENetProtocolHeader));
@@ -112,7 +114,7 @@ namespace ENetSharp
                         ToHostOrder(ref packet.Connect.PacketThrottleAcceleration);
                         ToHostOrder(ref packet.Connect.PacketThrottleDeceleration);
                         ToHostOrder(ref packet.Connect.SessionID);
-                        //TODO: Handle Connect
+                        peer = HandleConnect(fromAddr, packet.Connect);
                         break;
                     case ENetCommand.ENET_PROTOCOL_COMMAND_DISCONNECT:
                         ToHostOrder(ref packet.Disconnect.Data);
@@ -176,6 +178,26 @@ namespace ENetSharp
             if (shuttingDown) shutdownComplete.Set();
         }
 
+        #region "Handler Methods"
+
+        internal Object connectionLock = new Object();
+
+        Nullable<ENetPeer> HandleConnect(IPEndPoint from, ENetProtocolConnect packet)
+        {
+            lock (connectionLock)
+            {
+                foreach (var peer in Peers)
+                {
+                    if (peer.Value.Address == from && peer.Value.SessionID == packet.SessionID) return null;
+                }
+                ENetPeer newPeer = new ENetPeer();
+            }
+        }
+
+        #endregion
+
+        #region "Utility Methods"
+
         internal void ToHostOrder(ref ushort data)
         {
             data = (ushort)IPAddress.NetworkToHostOrder(unchecked((Int16)data));
@@ -185,5 +207,7 @@ namespace ENetSharp
         {
             data = (uint)IPAddress.NetworkToHostOrder(unchecked((Int32)data));
         }
+
+        #endregion
     }
 }

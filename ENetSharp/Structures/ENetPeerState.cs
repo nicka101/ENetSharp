@@ -8,7 +8,7 @@ namespace ENetSharp.Structures
 {
     public enum ENetPeerState
     {
-        DISCONNECTED = 0,
+        DISCONNECTED = 0, //Not sure I need this if I plan to remove the ENetPeer if it isn't being used
         CONNECTING = 1,
         ACKNOWLEDGING_CONNECT = 2,
         CONNECTION_PENDING = 3,
