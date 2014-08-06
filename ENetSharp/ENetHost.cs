@@ -190,7 +190,7 @@ namespace ENetSharp
                 {
                     if (peer.Value.Address == from && peer.Value.SessionID == packet.SessionID) return null;
                 }
-                ENetPeer newPeer = new ENetPeer();
+                ENetPeer newPeer = new ENetPeer(from, packet);
             }
         }
 
