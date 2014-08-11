@@ -9,19 +9,19 @@ namespace ENetSharp.Internal.Structures
 {
     internal enum ENetCommand
     {
-        ENET_PROTOCOL_COMMAND_NONE = 0,
-        ENET_PROTOCOL_COMMAND_ACKNOWLEDGE = 1,
-        ENET_PROTOCOL_COMMAND_CONNECT = 2,
-        ENET_PROTOCOL_COMMAND_VERIFY_CONNECT = 3,
-        ENET_PROTOCOL_COMMAND_DISCONNECT = 4,
-        ENET_PROTOCOL_COMMAND_PING = 5,
-        ENET_PROTOCOL_COMMAND_SEND_RELIABLE = 6,
-        ENET_PROTOCOL_COMMAND_SEND_UNRELIABLE = 7,
-        ENET_PROTOCOL_COMMAND_SEND_FRAGMENT = 8,
-        ENET_PROTOCOL_COMMAND_SEND_UNSEQUENCED = 9,
-        ENET_PROTOCOL_COMMAND_BANDWIDTH_LIMIT = 10,
-        ENET_PROTOCOL_COMMAND_THROTTLE_CONFIGURE = 11,
-        ENET_PROTOCOL_COMMAND_COUNT = 12,
+        NONE = 0,
+        ACKNOWLEDGE = 1,
+        CONNECT = 2,
+        VERIFY_CONNECT = 3,
+        DISCONNECT = 4,
+        PING = 5,
+        SEND_RELIABLE = 6,
+        SEND_UNRELIABLE = 7,
+        SEND_FRAGMENT = 8,
+        SEND_UNSEQUENCED = 9,
+        BANDWIDTH_LIMIT = 10,
+        THROTTLE_CONFIGURE = 11,
+        COUNT = 12,
 
         ENET_PROTOCOL_COMMAND_MASK = 0x0F
     }
@@ -33,27 +33,27 @@ namespace ENetSharp.Internal.Structures
         {
             switch (command)
             {
-                case ENetCommand.ENET_PROTOCOL_COMMAND_ACKNOWLEDGE:
+                case ENetCommand.ACKNOWLEDGE:
                     return sizeof(ENetProtocolAcknowledge);
-                case ENetCommand.ENET_PROTOCOL_COMMAND_CONNECT:
+                case ENetCommand.CONNECT:
                     return sizeof(ENetProtocolConnect);
-                case ENetCommand.ENET_PROTOCOL_COMMAND_VERIFY_CONNECT:
+                case ENetCommand.VERIFY_CONNECT:
                     return sizeof(ENetProtocolVerifyConnect);
-                case ENetCommand.ENET_PROTOCOL_COMMAND_DISCONNECT:
+                case ENetCommand.DISCONNECT:
                     return sizeof(ENetProtocolDisconnect);
-                case ENetCommand.ENET_PROTOCOL_COMMAND_PING:
+                case ENetCommand.PING:
                     return sizeof(ENetProtocolPing);
-                case ENetCommand.ENET_PROTOCOL_COMMAND_SEND_RELIABLE:
+                case ENetCommand.SEND_RELIABLE:
                     return sizeof(ENetProtocolSendReliable);
-                case ENetCommand.ENET_PROTOCOL_COMMAND_SEND_UNRELIABLE:
+                case ENetCommand.SEND_UNRELIABLE:
                     return sizeof(ENetProtocolSendUnreliable);
-                case ENetCommand.ENET_PROTOCOL_COMMAND_SEND_FRAGMENT:
+                case ENetCommand.SEND_FRAGMENT:
                     return sizeof(ENetProtocolSendFragment);
-                case ENetCommand.ENET_PROTOCOL_COMMAND_SEND_UNSEQUENCED:
+                case ENetCommand.SEND_UNSEQUENCED:
                     return sizeof(ENetProtocolSendUnsequenced);
-                case ENetCommand.ENET_PROTOCOL_COMMAND_BANDWIDTH_LIMIT:
+                case ENetCommand.BANDWIDTH_LIMIT:
                     return sizeof(ENetProtocolBandwidthLimit);
-                case ENetCommand.ENET_PROTOCOL_COMMAND_THROTTLE_CONFIGURE:
+                case ENetCommand.THROTTLE_CONFIGURE:
                     return sizeof(ENetProtocolThrottleConfigure);
                 default:
                     return 0;

@@ -57,6 +57,7 @@
     <Compile Include="Internal\Structures\ENetProtocolVerifyConnect.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Structures\ENetChannel.cs" />
+    <Compile Include="Structures\ENetPacket.cs" />
     <Compile Include="Structures\ENetPeer.cs" />
     <Compile Include="Structures\ENetPeerState.cs" />
   </ItemGroup>

@@ -24,6 +24,7 @@ namespace ENetSharp
         private ManualResetEventSlim shutdownComplete = new ManualResetEventSlim(false);
         private readonly int PeerCount;
         private ConcurrentDictionary<ushort, ENetPeer> Peers;
+        private ConcurrentBag<int> AvailablePeerIds = new ConcurrentBag<int>();
 
         public delegate void ConnectHandler(ENetPeer peer);
         public delegate void DisconnectHandler(ENetPeer peer);
@@ -33,9 +34,14 @@ namespace ENetSharp
         public event DisconnectHandler OnDisconnect;
         public event DataHandler OnData;
 
-        public ENetHost(IPEndPoint listenAddress)
+        public ENetHost(IPEndPoint listenAddress, int peerCount)
         {
+            if (peerCount > PROTOCOL_MAXIMUM_PEER_ID) throw new ArgumentException("The given peer count exceeds the protocol maximum of " + PROTOCOL_MAXIMUM_PEER_ID);
             connection = new UdpClient(listenAddress);
+            for (int i = 1; i <= peerCount; i++)
+            {
+                AvailablePeerIds.Add(i);
+            }
         }
 
         public void Start()
@@ -88,23 +94,23 @@ namespace ENetSharp
                 ENetProtocol packet = (ENetProtocol)Marshal.PtrToStructure(dataStart + currentDataOffset, typeof(ENetProtocol));
                 ToHostOrder(ref packet.Header.ReliableSequenceNumber);
                 ENetCommand command = (ENetCommand)(packet.Header.Command & (byte)ENetCommand.ENET_PROTOCOL_COMMAND_MASK);
-                if(command >= ENetCommand.ENET_PROTOCOL_COMMAND_COUNT) continue;
-                if (peer == null && command != ENetCommand.ENET_PROTOCOL_COMMAND_CONNECT) return; //Peer was following connection protocol but didn't send the connect first
+                if(command >= ENetCommand.COUNT) continue;
+                if (peer == null && command != ENetCommand.CONNECT) return; //Peer was following connection protocol but didn't send the connect first
                 currentDataOffset += command.Size();
                 if (currentDataOffset > data.Length) return; //The ENetCommand is larger than the remaining data
                 switch (command)
                 {
-                    case ENetCommand.ENET_PROTOCOL_COMMAND_ACKNOWLEDGE:
+                    case ENetCommand.ACKNOWLEDGE:
                         ToHostOrder(ref packet.Acknowledge.ReceivedReliableSequenceNumber);
                         ToHostOrder(ref packet.Acknowledge.ReceivedSentTime);
                         //TODO: Handle Acknowledge
                         break;
-                    case ENetCommand.ENET_PROTOCOL_COMMAND_BANDWIDTH_LIMIT:
+                    case ENetCommand.BANDWIDTH_LIMIT:
                         ToHostOrder(ref packet.BandwidthLimit.IncomingBandwidth);
                         ToHostOrder(ref packet.BandwidthLimit.OutgoingBandwidth);
                         //TODO: Handle Bandwidth Limit
                         break;
-                    case ENetCommand.ENET_PROTOCOL_COMMAND_CONNECT:
+                    case ENetCommand.CONNECT:
                         ToHostOrder(ref packet.Connect.MTU);
                         ToHostOrder(ref packet.Connect.WindowSize);
                         ToHostOrder(ref packet.Connect.ChannelCount);
@@ -116,14 +122,14 @@ namespace ENetSharp
                         ToHostOrder(ref packet.Connect.SessionID);
                         peer = HandleConnect(fromAddr, packet.Connect);
                         break;
-                    case ENetCommand.ENET_PROTOCOL_COMMAND_DISCONNECT:
+                    case ENetCommand.DISCONNECT:
                         ToHostOrder(ref packet.Disconnect.Data);
                         //TODO: Handle Disconnect
                         break;
-                    case ENetCommand.ENET_PROTOCOL_COMMAND_PING:
+                    case ENetCommand.PING:
                         //TODO: Handle Ping
                         break;
-                    case ENetCommand.ENET_PROTOCOL_COMMAND_SEND_FRAGMENT:
+                    case ENetCommand.SEND_FRAGMENT:
                         ToHostOrder(ref packet.SendFragment.StartSequenceNumber);
                         ToHostOrder(ref packet.SendFragment.DataLength);
                         ToHostOrder(ref packet.SendFragment.FragmentCount);
@@ -133,30 +139,30 @@ namespace ENetSharp
                         currentDataOffset += packet.SendFragment.DataLength;
                         //TODO: Handle Send Fragment
                         break;
-                    case ENetCommand.ENET_PROTOCOL_COMMAND_SEND_RELIABLE:
+                    case ENetCommand.SEND_RELIABLE:
                         ToHostOrder(ref packet.SendReliable.DataLength);
                         //TODO: Handle Send Reliable
                         currentDataOffset += packet.SendReliable.DataLength;
                         break;
-                    case ENetCommand.ENET_PROTOCOL_COMMAND_SEND_UNRELIABLE:
+                    case ENetCommand.SEND_UNRELIABLE:
                         ToHostOrder(ref packet.SendUnreliable.UnreliableSequenceNumber);
                         ToHostOrder(ref packet.SendUnreliable.DataLength);
                         currentDataOffset += packet.SendUnreliable.DataLength;
                         //TODO: Handle Send Unreliable
                         break;
-                    case ENetCommand.ENET_PROTOCOL_COMMAND_SEND_UNSEQUENCED:
+                    case ENetCommand.SEND_UNSEQUENCED:
                         ToHostOrder(ref packet.SendUnsequenced.UnsequencedGroup);
                         ToHostOrder(ref packet.SendUnsequenced.DataLength);
                         currentDataOffset += packet.SendUnsequenced.DataLength;
                         //TODO: Handle Send Unsequenced
                         break;
-                    case ENetCommand.ENET_PROTOCOL_COMMAND_THROTTLE_CONFIGURE:
+                    case ENetCommand.THROTTLE_CONFIGURE:
                         ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleInterval);
                         ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleAcceleration);
                         ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleDeceleration);
                         //TODO: Handle Throttle Configure
                         break;
-                    case ENetCommand.ENET_PROTOCOL_COMMAND_VERIFY_CONNECT:
+                    case ENetCommand.VERIFY_CONNECT:
                         ToHostOrder(ref packet.VerifyConnect.MTU);
                         ToHostOrder(ref packet.VerifyConnect.WindowSize);
                         ToHostOrder(ref packet.VerifyConnect.ChannelCount);
