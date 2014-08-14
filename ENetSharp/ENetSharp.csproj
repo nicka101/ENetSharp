@@ -39,28 +39,32 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Container\ENetChannelTypeLayout.cs" />
     <Compile Include="ENetHost.cs" />
-    <Compile Include="Internal\Structures\ENetCommand.cs" />
-    <Compile Include="Internal\Structures\ENetProtocol.cs" />
-    <Compile Include="Internal\Structures\ENetProtocolAcknowledge.cs" />
-    <Compile Include="Internal\Structures\ENetProtocolBandwidthLimit.cs" />
-    <Compile Include="Internal\Structures\ENetProtocolCommandHeader.cs" />
-    <Compile Include="Internal\Structures\ENetProtocolConnect.cs" />
-    <Compile Include="Internal\Structures\ENetProtocolDisconnect.cs" />
-    <Compile Include="Internal\Structures\ENetProtocolHeader.cs" />
-    <Compile Include="Internal\Structures\ENetProtocolPing.cs" />
-    <Compile Include="Internal\Structures\ENetProtocolSendFragment.cs" />
-    <Compile Include="Internal\Structures\ENetProtocolSendReliable.cs" />
-    <Compile Include="Internal\Structures\ENetProtocolSendUnreliable.cs" />
-    <Compile Include="Internal\Structures\ENetProtocolSendUnsequenced.cs" />
-    <Compile Include="Internal\Structures\ENetProtocolThrottleConfigure.cs" />
-    <Compile Include="Internal\Structures\ENetProtocolVerifyConnect.cs" />
+    <Compile Include="Internal\Container\OutgoingCommand.cs" />
+    <Compile Include="Internal\Protocol\ENetCommand.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocol.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocolAcknowledge.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocolBandwidthLimit.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocolCommandHeader.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocolConnect.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocolDisconnect.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocolHeader.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocolPing.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocolSendFragment.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocolSendReliable.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocolSendUnreliable.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocolSendUnsequenced.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocolThrottleConfigure.cs" />
+    <Compile Include="Internal\Protocol\ENetProtocolVerifyConnect.cs" />
+    <Compile Include="Protocol\ENetSendType.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Structures\ENetChannel.cs" />
-    <Compile Include="Structures\ENetPacket.cs" />
-    <Compile Include="Structures\ENetPeer.cs" />
-    <Compile Include="Structures\ENetPeerState.cs" />
+    <Compile Include="Internal\Container\ENetChannel.cs" />
+    <Compile Include="Protocol\ENetPacket.cs" />
+    <Compile Include="Protocol\ENetPeer.cs" />
+    <Compile Include="Protocol\ENetPeerState.cs" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

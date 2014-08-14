@@ -1,6 +1,8 @@
-﻿using ENetSharp.Internal.Structures;
-using ENetSharp.Structures;
+﻿using ENetSharp.Container;
+using ENetSharp.Internal.Protocol;
+using ENetSharp.Protocol;
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Net;
@@ -22,9 +24,10 @@ namespace ENetSharp
         private UdpClient connection;
         private bool shuttingDown = false;
         private ManualResetEventSlim shutdownComplete = new ManualResetEventSlim(false);
-        private readonly int PeerCount;
+        private readonly ushort PeerCount;
         private ConcurrentDictionary<ushort, ENetPeer> Peers;
-        private ConcurrentBag<int> AvailablePeerIds = new ConcurrentBag<int>();
+        private ConcurrentQueue<ushort> AvailablePeerIds = new ConcurrentQueue<ushort>();
+        internal readonly ENetChannelTypeLayout ChannelLayout;
 
         public delegate void ConnectHandler(ENetPeer peer);
         public delegate void DisconnectHandler(ENetPeer peer);
@@ -34,13 +37,15 @@ namespace ENetSharp
         public event DisconnectHandler OnDisconnect;
         public event DataHandler OnData;
 
-        public ENetHost(IPEndPoint listenAddress, int peerCount)
+        public ENetHost(IPEndPoint listenAddress, ushort peerCount, ENetChannelTypeLayout channelLayout)
         {
             if (peerCount > PROTOCOL_MAXIMUM_PEER_ID) throw new ArgumentException("The given peer count exceeds the protocol maximum of " + PROTOCOL_MAXIMUM_PEER_ID);
+            PeerCount = peerCount;
+            ChannelLayout = channelLayout;
             connection = new UdpClient(listenAddress);
-            for (int i = 1; i <= peerCount; i++)
+            for (ushort i = 1; i <= peerCount; i++)
             {
-                AvailablePeerIds.Add(i);
+                AvailablePeerIds.Enqueue(i);
             }
         }
 
@@ -196,7 +201,11 @@ namespace ENetSharp
                 {
                     if (peer.Value.Address == from && peer.Value.SessionID == packet.SessionID) return null;
                 }
-                ENetPeer newPeer = new ENetPeer(from, packet);
+                ushort peerID;
+                if (!AvailablePeerIds.TryDequeue(out peerID)) return null; //No peers available within the client limit
+                ENetPeer newPeer = new ENetPeer(from, peerID, packet, ChannelLayout);
+                ((IDictionary)Peers).Add(peerID, newPeer);
+                return newPeer;
             }
         }
 

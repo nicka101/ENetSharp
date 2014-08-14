@@ -4,11 +4,12 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ENetSharp.Structures
+namespace ENetSharp.Protocol
 {
-    public class ENetPacket
+    internal enum ENetSendType
     {
-        internal uint Flags;
-        public byte[] Data;
+        UNRELIABLE = 0,
+        UNSEQUENCED = 64,
+        RELIABLE = 128
     }
 }

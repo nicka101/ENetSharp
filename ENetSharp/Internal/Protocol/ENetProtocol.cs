@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ENetSharp.Internal.Structures
+namespace ENetSharp.Internal.Protocol
 {
     [StructLayout(LayoutKind.Explicit, Pack = 1)] //This is a C# pseudo-union
     internal struct ENetProtocol

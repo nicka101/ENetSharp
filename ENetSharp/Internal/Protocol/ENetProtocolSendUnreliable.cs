@@ -5,13 +5,13 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ENetSharp.Internal.Structures
+namespace ENetSharp.Internal.Protocol
 {
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    internal struct ENetProtocolSendUnsequenced
+    internal struct ENetProtocolSendUnreliable
     {
         public ENetProtocolCommandHeader Header;
-        public ushort UnsequencedGroup;
+        public ushort UnreliableSequenceNumber;
         public ushort DataLength;
     }
 }

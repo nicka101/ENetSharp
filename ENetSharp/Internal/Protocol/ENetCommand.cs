@@ -1,11 +1,11 @@
-﻿using ENetSharp.Internal.Structures;
+﻿using ENetSharp.Internal.Protocol;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ENetSharp.Internal.Structures
+namespace ENetSharp.Internal.Protocol
 {
     internal enum ENetCommand
     {

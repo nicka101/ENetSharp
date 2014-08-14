@@ -5,12 +5,13 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ENetSharp.Internal.Structures
+namespace ENetSharp.Internal.Protocol
 {
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    internal struct ENetProtocolSendReliable
+    internal struct ENetProtocolCommandHeader
     {
-        public ENetProtocolCommandHeader Header;
-        public ushort DataLength;
+        public byte Command;
+        public byte ChannelID;
+        public ushort ReliableSequenceNumber;
     }
 }

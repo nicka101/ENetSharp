@@ -5,12 +5,13 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ENetSharp.Internal.Structures
+namespace ENetSharp.Internal.Protocol
 {
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    internal struct ENetProtocolHeader
+    internal struct ENetProtocolBandwidthLimit
     {
-        public ushort PeerID;
-        public ushort SentTime;
+        public ENetProtocolCommandHeader Header;
+        public uint IncomingBandwidth;
+        public uint OutgoingBandwidth;
     }
 }
