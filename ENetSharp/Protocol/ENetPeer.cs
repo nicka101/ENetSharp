@@ -59,12 +59,12 @@ namespace ENetSharp.Protocol
         internal uint WindowSize;
         internal uint ReliableDataInTransit = 0;
         internal ushort OutgoingReliableSequenceNumber = 0;
-        internal ENetList Acknowledgements;
         internal ENetList SentReliableCommands;
         internal ENetList SentUnreliableCommands;
         internal ENetList OutgoingReliableCommands;
         internal ENetList OutgoingUnreliableCommands;
         internal ENetList DispatchedCommands;
+        internal ConcurrentQueue<ENetProtocolAcknowledge> PendingAcks = new ConcurrentQueue<ENetProtocolAcknowledge>();
         internal bool NeedsDispatch = false;
         internal ushort IncomingUnsequencedGroup = 0;
         internal ushort OutgoingUnsequencedGroup = 0;

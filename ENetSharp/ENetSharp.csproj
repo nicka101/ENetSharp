@@ -57,6 +57,7 @@
     <Compile Include="Internal\Protocol\ENetProtocolSendUnsequenced.cs" />
     <Compile Include="Internal\Protocol\ENetProtocolThrottleConfigure.cs" />
     <Compile Include="Internal\Protocol\ENetProtocolVerifyConnect.cs" />
+    <Compile Include="Internal\Util.cs" />
     <Compile Include="Protocol\ENetSendType.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Internal\Container\ENetChannel.cs" />

@@ -1,4 +1,5 @@
 ﻿using ENetSharp.Container;
+using ENetSharp.Internal;
 using ENetSharp.Internal.Protocol;
 using ENetSharp.Protocol;
 using System;
@@ -70,7 +71,7 @@ namespace ENetSharp
             var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
             IntPtr dataStart = handle.AddrOfPinnedObject();
             ENetProtocolHeader header = (ENetProtocolHeader)Marshal.PtrToStructure(dataStart, typeof(ENetProtocolHeader));
-            header.PeerID = (ushort)IPAddress.NetworkToHostOrder(unchecked((Int16)header.PeerID));
+            Util.ToHostOrder(ref header.PeerID);
             ushort flag = (ushort)(header.PeerID & PROTOCOL_HEADER_FLAG_MASK);
             header.PeerID &= unchecked((ushort)~(uint)PROTOCOL_HEADER_FLAG_MASK);
 
@@ -88,7 +89,7 @@ namespace ENetSharp
                         goto finalPacket; //The peer is disconnected, dead or the packets origin doesn't match the peer - Ignore them
                     }
                 }
-                catch (KeyNotFoundException)
+                catch (System.Collections.Generic.KeyNotFoundException)
                 {
                     goto finalPacket; //The client doesn't exist and this doesn't follow connection protocol - Ignore them
                 }
@@ -97,7 +98,7 @@ namespace ENetSharp
             while (currentDataOffset < data.Length)
             {
                 ENetProtocol packet = (ENetProtocol)Marshal.PtrToStructure(dataStart + currentDataOffset, typeof(ENetProtocol));
-                ToHostOrder(ref packet.Header.ReliableSequenceNumber);
+                Util.ToHostOrder(ref packet.Header.ReliableSequenceNumber);
                 ENetCommand command = (ENetCommand)(packet.Header.Command & (byte)ENetCommand.ENET_PROTOCOL_COMMAND_MASK);
                 if(command >= ENetCommand.COUNT) continue;
                 if (peer == null && command != ENetCommand.CONNECT) return; //Peer was following connection protocol but didn't send the connect first
@@ -106,76 +107,76 @@ namespace ENetSharp
                 switch (command)
                 {
                     case ENetCommand.ACKNOWLEDGE:
-                        ToHostOrder(ref packet.Acknowledge.ReceivedReliableSequenceNumber);
-                        ToHostOrder(ref packet.Acknowledge.ReceivedSentTime);
+                        Util.ToHostOrder(ref packet.Acknowledge.ReceivedReliableSequenceNumber);
+                        Util.ToHostOrder(ref packet.Acknowledge.ReceivedSentTime);
                         //TODO: Handle Acknowledge
                         break;
                     case ENetCommand.BANDWIDTH_LIMIT:
-                        ToHostOrder(ref packet.BandwidthLimit.IncomingBandwidth);
-                        ToHostOrder(ref packet.BandwidthLimit.OutgoingBandwidth);
+                        Util.ToHostOrder(ref packet.BandwidthLimit.IncomingBandwidth);
+                        Util.ToHostOrder(ref packet.BandwidthLimit.OutgoingBandwidth);
                         //TODO: Handle Bandwidth Limit
                         break;
                     case ENetCommand.CONNECT:
-                        ToHostOrder(ref packet.Connect.MTU);
-                        ToHostOrder(ref packet.Connect.WindowSize);
-                        ToHostOrder(ref packet.Connect.ChannelCount);
-                        ToHostOrder(ref packet.Connect.IncomingBandwidth);
-                        ToHostOrder(ref packet.Connect.OutgoingBandwidth);
-                        ToHostOrder(ref packet.Connect.PacketThrottleInterval);
-                        ToHostOrder(ref packet.Connect.PacketThrottleAcceleration);
-                        ToHostOrder(ref packet.Connect.PacketThrottleDeceleration);
-                        ToHostOrder(ref packet.Connect.SessionID);
+                        Util.ToHostOrder(ref packet.Connect.MTU);
+                        Util.ToHostOrder(ref packet.Connect.WindowSize);
+                        Util.ToHostOrder(ref packet.Connect.ChannelCount);
+                        Util.ToHostOrder(ref packet.Connect.IncomingBandwidth);
+                        Util.ToHostOrder(ref packet.Connect.OutgoingBandwidth);
+                        Util.ToHostOrder(ref packet.Connect.PacketThrottleInterval);
+                        Util.ToHostOrder(ref packet.Connect.PacketThrottleAcceleration);
+                        Util.ToHostOrder(ref packet.Connect.PacketThrottleDeceleration);
+                        Util.ToHostOrder(ref packet.Connect.SessionID);
                         peer = HandleConnect(fromAddr, packet.Connect);
                         break;
                     case ENetCommand.DISCONNECT:
-                        ToHostOrder(ref packet.Disconnect.Data);
+                        Util.ToHostOrder(ref packet.Disconnect.Data);
                         //TODO: Handle Disconnect
                         break;
                     case ENetCommand.PING:
                         //TODO: Handle Ping
                         break;
                     case ENetCommand.SEND_FRAGMENT:
-                        ToHostOrder(ref packet.SendFragment.StartSequenceNumber);
-                        ToHostOrder(ref packet.SendFragment.DataLength);
-                        ToHostOrder(ref packet.SendFragment.FragmentCount);
-                        ToHostOrder(ref packet.SendFragment.FragmentNumber);
-                        ToHostOrder(ref packet.SendFragment.TotalLength);
-                        ToHostOrder(ref packet.SendFragment.FragmentOffset);
+                        Util.ToHostOrder(ref packet.SendFragment.StartSequenceNumber);
+                        Util.ToHostOrder(ref packet.SendFragment.DataLength);
+                        Util.ToHostOrder(ref packet.SendFragment.FragmentCount);
+                        Util.ToHostOrder(ref packet.SendFragment.FragmentNumber);
+                        Util.ToHostOrder(ref packet.SendFragment.TotalLength);
+                        Util.ToHostOrder(ref packet.SendFragment.FragmentOffset);
                         currentDataOffset += packet.SendFragment.DataLength;
                         //TODO: Handle Send Fragment
                         break;
                     case ENetCommand.SEND_RELIABLE:
-                        ToHostOrder(ref packet.SendReliable.DataLength);
+                        Util.ToHostOrder(ref packet.SendReliable.DataLength);
                         //TODO: Handle Send Reliable
                         currentDataOffset += packet.SendReliable.DataLength;
                         break;
                     case ENetCommand.SEND_UNRELIABLE:
-                        ToHostOrder(ref packet.SendUnreliable.UnreliableSequenceNumber);
-                        ToHostOrder(ref packet.SendUnreliable.DataLength);
+                        Util.ToHostOrder(ref packet.SendUnreliable.UnreliableSequenceNumber);
+                        Util.ToHostOrder(ref packet.SendUnreliable.DataLength);
                         currentDataOffset += packet.SendUnreliable.DataLength;
                         //TODO: Handle Send Unreliable
                         break;
                     case ENetCommand.SEND_UNSEQUENCED:
-                        ToHostOrder(ref packet.SendUnsequenced.UnsequencedGroup);
-                        ToHostOrder(ref packet.SendUnsequenced.DataLength);
+                        Util.ToHostOrder(ref packet.SendUnsequenced.UnsequencedGroup);
+                        Util.ToHostOrder(ref packet.SendUnsequenced.DataLength);
                         currentDataOffset += packet.SendUnsequenced.DataLength;
                         //TODO: Handle Send Unsequenced
                         break;
                     case ENetCommand.THROTTLE_CONFIGURE:
-                        ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleInterval);
-                        ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleAcceleration);
-                        ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleDeceleration);
+                        Util.ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleInterval);
+                        Util.ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleAcceleration);
+                        Util.ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleDeceleration);
                         //TODO: Handle Throttle Configure
                         break;
                     case ENetCommand.VERIFY_CONNECT:
-                        ToHostOrder(ref packet.VerifyConnect.MTU);
-                        ToHostOrder(ref packet.VerifyConnect.WindowSize);
-                        ToHostOrder(ref packet.VerifyConnect.ChannelCount);
-                        ToHostOrder(ref packet.VerifyConnect.IncomingBandwidth);
-                        ToHostOrder(ref packet.VerifyConnect.OutgoingBandwidth);
-                        ToHostOrder(ref packet.VerifyConnect.PacketThrottleInterval);
-                        ToHostOrder(ref packet.VerifyConnect.PacketThrottleAcceleration);
-                        ToHostOrder(ref packet.VerifyConnect.PacketThrottleDeceleration);
+                        Util.ToHostOrder(ref packet.VerifyConnect.MTU);
+                        Util.ToHostOrder(ref packet.VerifyConnect.WindowSize);
+                        Util.ToHostOrder(ref packet.VerifyConnect.ChannelCount);
+                        Util.ToHostOrder(ref packet.VerifyConnect.IncomingBandwidth);
+                        Util.ToHostOrder(ref packet.VerifyConnect.OutgoingBandwidth);
+                        Util.ToHostOrder(ref packet.VerifyConnect.PacketThrottleInterval);
+                        Util.ToHostOrder(ref packet.VerifyConnect.PacketThrottleAcceleration);
+                        Util.ToHostOrder(ref packet.VerifyConnect.PacketThrottleDeceleration);
                         //TODO: Handle Verify Connect
                         break;
                     default:
@@ -209,18 +210,26 @@ namespace ENetSharp
             }
         }
 
-        #endregion
-
-        #region "Utility Methods"
-
-        internal void ToHostOrder(ref ushort data)
+        unsafe void SendAcks()
         {
-            data = (ushort)IPAddress.NetworkToHostOrder(unchecked((Int16)data));
-        }
-
-        internal void ToHostOrder(ref uint data)
-        {
-            data = (uint)IPAddress.NetworkToHostOrder(unchecked((Int32)data));
+            foreach(var peer in Peers.Values){
+                if(peer.State == ENetPeerState.DISCONNECTED || peer.State == ENetPeerState.ZOMBIE) continue;
+                ENetProtocolAcknowledge ack;
+                int offset = sizeof(ENetProtocolHeader);
+                int ackSize = ENetCommand.ACKNOWLEDGE.Size();
+                int totalSize = offset + (peer.PendingAcks.Count * ackSize);
+                var handle = Marshal.AllocHGlobal(totalSize);
+                while (peer.PendingAcks.TryDequeue(out ack))
+                {
+                    Marshal.StructureToPtr(ack, handle + offset, false);
+                    offset += ackSize;
+                }
+                ENetProtocolHeader header = new ENetProtocolHeader { PeerID = Util.ToNetOrder(peer.OutgoingPeerID), SentTime = Util.ToNetOrder(Util.Timestamp()) };
+                Marshal.StructureToPtr(header, handle, false);
+                byte[] data = new byte[totalSize];
+                Marshal.Copy(handle, data, 0, totalSize);
+                Marshal.FreeHGlobal(handle);
+            }
         }
 
         #endregion
