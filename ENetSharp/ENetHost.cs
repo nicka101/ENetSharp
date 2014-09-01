@@ -61,7 +61,7 @@ namespace ENetSharp
             shutdownComplete.Wait();
         }
 
-        internal unsafe void ReceiveDatagram(IAsyncResult ar)
+        private unsafe void ReceiveDatagram(IAsyncResult ar)
         {
             IPEndPoint fromAddr = new IPEndPoint(IPAddress.Any, 0);
             byte[] data = connection.EndReceive(ar, ref fromAddr);
@@ -99,7 +99,7 @@ namespace ENetSharp
             {
                 ENetProtocol packet = (ENetProtocol)Marshal.PtrToStructure(dataStart + currentDataOffset, typeof(ENetProtocol));
                 Util.ToHostOrder(ref packet.Header.ReliableSequenceNumber);
-                ENetCommand command = (ENetCommand)(packet.Header.Command & (byte)ENetCommand.ENET_PROTOCOL_COMMAND_MASK);
+                ENetCommand command = (ENetCommand)(packet.Header.Command & (byte)ENetCommand.COMMAND_MASK);
                 if(command >= ENetCommand.COUNT) continue;
                 if (peer == null && command != ENetCommand.CONNECT) return; //Peer was following connection protocol but didn't send the connect first
                 currentDataOffset += command.Size();
@@ -117,6 +117,7 @@ namespace ENetSharp
                         //TODO: Handle Bandwidth Limit
                         break;
                     case ENetCommand.CONNECT:
+                        Console.WriteLine("A connected peer sent a connect packet. WTF are they doing?");
                         Util.ToHostOrder(ref packet.Connect.MTU);
                         Util.ToHostOrder(ref packet.Connect.WindowSize);
                         Util.ToHostOrder(ref packet.Connect.ChannelCount);
@@ -194,7 +195,7 @@ namespace ENetSharp
 
         internal Object connectionLock = new Object();
 
-        Nullable<ENetPeer> HandleConnect(IPEndPoint from, ENetProtocolConnect packet)
+        private Nullable<ENetPeer> HandleConnect(IPEndPoint from, ENetProtocolConnect packet)
         {
             lock (connectionLock)
             {
@@ -210,25 +211,10 @@ namespace ENetSharp
             }
         }
 
-        unsafe void SendAcks()
+        private unsafe void SendAcks()
         {
             foreach(var peer in Peers.Values){
-                if(peer.State == ENetPeerState.DISCONNECTED || peer.State == ENetPeerState.ZOMBIE) continue;
-                ENetProtocolAcknowledge ack;
-                int offset = sizeof(ENetProtocolHeader);
-                int ackSize = ENetCommand.ACKNOWLEDGE.Size();
-                int totalSize = offset + (peer.PendingAcks.Count * ackSize);
-                var handle = Marshal.AllocHGlobal(totalSize);
-                while (peer.PendingAcks.TryDequeue(out ack))
-                {
-                    Marshal.StructureToPtr(ack, handle + offset, false);
-                    offset += ackSize;
-                }
-                ENetProtocolHeader header = new ENetProtocolHeader { PeerID = Util.ToNetOrder(peer.OutgoingPeerID), SentTime = Util.ToNetOrder(Util.Timestamp()) };
-                Marshal.StructureToPtr(header, handle, false);
-                byte[] data = new byte[totalSize];
-                Marshal.Copy(handle, data, 0, totalSize);
-                Marshal.FreeHGlobal(handle);
+                peer.SendAcks();
             }
         }
 

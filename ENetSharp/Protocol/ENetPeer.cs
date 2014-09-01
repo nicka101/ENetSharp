@@ -1,4 +1,5 @@
 ﻿using ENetSharp.Container;
+using ENetSharp.Internal;
 using ENetSharp.Internal.Container;
 using ENetSharp.Internal.Protocol;
 using System;
@@ -6,6 +7,7 @@ using System.Collections.Concurrent;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -16,7 +18,8 @@ namespace ENetSharp.Protocol
         internal const ushort PROTOCOL_MAXIMUM_MTU = 996;
         internal const ushort PROTOCOL_MAXIMUM_WINDOW_SIZE = 32768;
 
-        internal UdpClient sendConnection = new UdpClient();
+        private UdpClient sendConnection = new UdpClient();
+        private Object sendLock = new Object();
 
         //internal LinkedList<ENetPeer>  DispatchList;
         //Server
@@ -68,7 +71,7 @@ namespace ENetSharp.Protocol
         internal bool NeedsDispatch = false;
         internal ushort IncomingUnsequencedGroup = 0;
         internal ushort OutgoingUnsequencedGroup = 0;
-        internal uint UnsequencedWindow [ENET_PEER_UNSEQUENCED_WINDOW_SIZE / 32]; 
+        internal fixed uint UnsequencedWindow [ENET_PEER_UNSEQUENCED_WINDOW_SIZE / 32]; 
         internal uint DisconnectData = 0;
 
         internal ENetPeer(IPEndPoint Address, ushort IncomingPeerID, ENetProtocolConnect packet, ENetChannelTypeLayout channelLayout){
@@ -86,14 +89,45 @@ namespace ENetSharp.Protocol
         }
 
         internal void SendRaw(byte[] data){
-            sendConnection.BeginSend(data, data.Length, Address, EndSend, data.Length);
+            lock(sendLock){
+                sendConnection.BeginSend(data, data.Length, Address, EndSend, data.Length);
+            }
+        }
+
+        internal void SendENet(byte[] enetPacket){
+            byte[] data = new byte[ENetCommand.PROTOCOL_HEADER.Size() + enetPacket.Length];
+            ENetProtocolHeader header = new ENetProtocolHeader { PeerID = Util.ToNetOrder(OutgoingPeerID), SentTime = Util.ToNetOrder(Util.Timestamp()) };
+            var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+            Marshal.StructureToPtr(header, handle.AddrOfPinnedObject(), false);
+            handle.Free();
+            Buffer.BlockCopy(enetPacket, 0, data, ENetCommand.PROTOCOL_HEADER.Size(), enetPacket.Length);
+            SendRaw(data);
+        }
+
+        internal void SendAcks(){
+            if(State == ENetPeerState.DISCONNECTED || State == ENetPeerState.ZOMBIE) return;
+            ENetProtocolAcknowledge ack;
+            int headerSize = sizeof(ENetProtocolHeader);
+            int ackSize = ENetCommand.ACKNOWLEDGE.Size();
+            byte[] data = new byte[headerSize + (PendingAcks.Count * ackSize)];
+            var handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+            var currentLoc = handle.AddrOfPinnedObject() + headerSize;
+            while (PendingAcks.TryDequeue(out ack))
+            {
+                Marshal.StructureToPtr(ack, currentLoc, false);
+                currentLoc += ackSize;
+            }
+            ENetProtocolHeader header = new ENetProtocolHeader { PeerID = Util.ToNetOrder(OutgoingPeerID), SentTime = Util.ToNetOrder(Util.Timestamp()) };
+            Marshal.StructureToPtr(header, handle.AddrOfPinnedObject(), false);
+            handle.Free();
+            SendRaw(data);
         }
 
         public bool Send(byte channelID, ENetPacket packet){
             if(State != ENetPeerState.CONNECTED || channelID > Channels.Length) return false;
             if(packet.Data.Length > FragmentLength){ //Packet bigger than MTU, fragment it
-                ushort sequenceNo = (ushort)IPAddress.HostToNetworkOrder(unchecked((Int16)OutgoingReliableSequenceNumber + 1));
-                uint fragCount = (uint)IPAddress.HostToNetworkOrder((packet.Data.Length + FragmentLength - 1) / FragmentLength);
+                ushort sequenceNo = Util.ToNetOrder((ushort)(OutgoingReliableSequenceNumber + 1));
+                uint fragCount = Util.ToNetOrder((uint)((packet.Data.Length + FragmentLength - 1) / FragmentLength));
 
                 for(int fragmentNo = 0, fragmentOffset = 0; fragmentOffset < packet.Data.Length; fragmentNo++, fragmentOffset += FragmentLength){
                     if (packet.Data.Length - fragmentOffset < FragmentLength) FragmentLength = packet.Data.Length - fragmentOffset;

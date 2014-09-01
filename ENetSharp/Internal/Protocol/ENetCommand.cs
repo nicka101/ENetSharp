@@ -23,7 +23,8 @@ namespace ENetSharp.Internal.Protocol
         THROTTLE_CONFIGURE = 11,
         COUNT = 12,
 
-        ENET_PROTOCOL_COMMAND_MASK = 0x0F
+        PROTOCOL_HEADER = 17,
+        COMMAND_MASK = 0x0F
     }
 
     internal static class ENetCommandExtensions
@@ -55,6 +56,8 @@ namespace ENetSharp.Internal.Protocol
                     return sizeof(ENetProtocolBandwidthLimit);
                 case ENetCommand.THROTTLE_CONFIGURE:
                     return sizeof(ENetProtocolThrottleConfigure);
+                case ENetCommand.PROTOCOL_HEADER:
+                    return sizeof(ENetProtocolHeader);
                 default:
                     return 0;
             }
