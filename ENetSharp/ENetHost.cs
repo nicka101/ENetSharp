@@ -1,5 +1,6 @@
 ﻿using ENetSharp.Container;
 using ENetSharp.Internal;
+using ENetSharp.Internal.Container;
 using ENetSharp.Internal.Protocol;
 using ENetSharp.Protocol;
 using System;
@@ -21,12 +22,16 @@ namespace ENetSharp
         internal const byte PROTOCOL_MINIMUM_CHANNEL_COUNT = 1;
         internal const byte PROTOCOL_MAXIMUM_CHANNEL_COUNT = 255;
         internal const int PROTOCOL_MAXIMUM_PEER_ID = 0x007F;
+        internal const ushort PEER_RELIABLE_WINDOW_SIZE = 0x1000;
+        internal const ushort PEER_RELIABLE_WINDOWS = 16;
+        internal const ushort PEER_FREE_RELIABLE_WINDOWS = 8;
 
         private UdpClient connection;
         private bool shuttingDown = false;
         private ManualResetEventSlim shutdownComplete = new ManualResetEventSlim(false);
         private readonly ushort PeerCount;
         private ConcurrentDictionary<ushort, ENetPeer> Peers;
+        private ConcurrentDictionary<byte, ENetChannel> Channels;
         private ConcurrentQueue<ushort> AvailablePeerIds = new ConcurrentQueue<ushort>();
         internal readonly ENetChannelTypeLayout ChannelLayout;
 
@@ -99,6 +104,7 @@ namespace ENetSharp
             {
                 ENetProtocol packet = (ENetProtocol)Marshal.PtrToStructure(dataStart + currentDataOffset, typeof(ENetProtocol));
                 Util.ToHostOrder(ref packet.Header.ReliableSequenceNumber);
+                if (packet.Header.ChannelID >= ChannelLayout.ChannelCount()) continue;
                 ENetCommand command = (ENetCommand)(packet.Header.Command & (byte)ENetCommand.COMMAND_MASK);
                 if(command >= ENetCommand.COUNT) continue;
                 if (peer == null && command != ENetCommand.CONNECT) return; //Peer was following connection protocol but didn't send the connect first
@@ -134,34 +140,57 @@ namespace ENetSharp
                         //TODO: Handle Disconnect
                         break;
                     case ENetCommand.PING:
-                        //TODO: Handle Ping
+                        //Ping has no handling in the real ENet
                         break;
                     case ENetCommand.SEND_FRAGMENT:
+                        Util.ToHostOrder(ref packet.SendFragment.DataLength); //We have to assume the fragment is the right type for the channel until I figure out how it indicates it
                         Util.ToHostOrder(ref packet.SendFragment.StartSequenceNumber);
-                        Util.ToHostOrder(ref packet.SendFragment.DataLength);
                         Util.ToHostOrder(ref packet.SendFragment.FragmentCount);
                         Util.ToHostOrder(ref packet.SendFragment.FragmentNumber);
                         Util.ToHostOrder(ref packet.SendFragment.TotalLength);
                         Util.ToHostOrder(ref packet.SendFragment.FragmentOffset);
+                        byte[] fragmentData = new byte[packet.SendFragment.DataLength];
+                        Marshal.Copy(dataStart + currentDataOffset, fragmentData, 0, packet.SendFragment.DataLength);
                         currentDataOffset += packet.SendFragment.DataLength;
-                        //TODO: Handle Send Fragment
+                        HandleFragment(peer.Value, packet.SendFragment, fragmentData);
                         break;
                     case ENetCommand.SEND_RELIABLE:
                         Util.ToHostOrder(ref packet.SendReliable.DataLength);
-                        //TODO: Handle Send Reliable
+                        if ((ChannelLayout[packet.Header.ChannelID] & ENetSendType.RELIABLE) == 0) //Each of the data handlers uses this to quickly discard any data not matching the channels send type
+                        {
+                            currentDataOffset += packet.SendReliable.DataLength;
+                            break;
+                        }
+                        byte[] reliableData = new byte[packet.SendReliable.DataLength];
+                        Marshal.Copy(dataStart + currentDataOffset, reliableData, 0, packet.SendReliable.DataLength);
                         currentDataOffset += packet.SendReliable.DataLength;
+                        HandleReliable(peer.Value, packet.SendReliable, reliableData);
                         break;
                     case ENetCommand.SEND_UNRELIABLE:
-                        Util.ToHostOrder(ref packet.SendUnreliable.UnreliableSequenceNumber);
                         Util.ToHostOrder(ref packet.SendUnreliable.DataLength);
+                        if ((ChannelLayout[packet.Header.ChannelID] & ENetSendType.UNRELIABLE) == 0)
+                        {
+                            currentDataOffset += packet.SendUnreliable.DataLength;
+                            break;
+                        }
+                        Util.ToHostOrder(ref packet.SendUnreliable.UnreliableSequenceNumber);
+                        byte[] unreliableData = new byte[packet.SendUnreliable.DataLength];
+                        Marshal.Copy(dataStart + currentDataOffset, unreliableData, 0, packet.SendUnreliable.DataLength);
                         currentDataOffset += packet.SendUnreliable.DataLength;
-                        //TODO: Handle Send Unreliable
+                        HandleUnreliable(peer.Value, packet.SendUnreliable, unreliableData);
                         break;
                     case ENetCommand.SEND_UNSEQUENCED:
-                        Util.ToHostOrder(ref packet.SendUnsequenced.UnsequencedGroup);
                         Util.ToHostOrder(ref packet.SendUnsequenced.DataLength);
+                        if ((ChannelLayout[packet.Header.ChannelID] & ENetSendType.UNSEQUENCED) == 0)
+                        {
+                            currentDataOffset += packet.SendUnsequenced.DataLength;
+                            break;
+                        }
+                        Util.ToHostOrder(ref packet.SendUnsequenced.UnsequencedGroup);
+                        byte[] unsequencedData = new byte[packet.SendUnsequenced.DataLength];
+                        Marshal.Copy(dataStart + currentDataOffset, unsequencedData, 0, packet.SendUnsequenced.DataLength);
                         currentDataOffset += packet.SendUnsequenced.DataLength;
-                        //TODO: Handle Send Unsequenced
+                        HandleUnsequenced(peer.Value, packet.SendUnsequenced, unsequencedData);
                         break;
                     case ENetCommand.THROTTLE_CONFIGURE:
                         Util.ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleInterval);
@@ -209,6 +238,39 @@ namespace ENetSharp
                 ((IDictionary)Peers).Add(peerID, newPeer);
                 return newPeer;
             }
+        }
+
+        private void HandleReliable(ENetPeer peer, ENetProtocolSendReliable packet, byte[] data)
+        {
+            if (peer.State != ENetPeerState.CONNECTED && peer.State != ENetPeerState.DISCONNECT_LATER) return;
+            if (DropSequencedData(packet.Header)) return;
+        }
+
+        private void HandleFragment(ENetPeer peer, ENetProtocolSendFragment packet, byte[] data)
+        {
+            if (peer.State != ENetPeerState.CONNECTED && peer.State != ENetPeerState.DISCONNECT_LATER) return;
+            if (DropSequencedData(packet.Header)) return;
+        }
+
+        private void HandleUnreliable(ENetPeer peer, ENetProtocolSendUnreliable packet, byte[] data)
+        {
+            if (peer.State != ENetPeerState.CONNECTED && peer.State != ENetPeerState.DISCONNECT_LATER) return;
+            if (DropSequencedData(packet.Header)) return;
+        }
+
+        bool DropSequencedData(ENetProtocolCommandHeader header)
+        {
+            ENetChannel channel = Channels[header.ChannelID];
+            ushort reliableWindow = (ushort)(header.ReliableSequenceNumber / PEER_RELIABLE_WINDOW_SIZE);
+            ushort currentWindow = (ushort)(channel.IncomingSequenceNumber / PEER_RELIABLE_WINDOW_SIZE);
+            if (header.ReliableSequenceNumber < channel.IncomingSequenceNumber) reliableWindow += PEER_RELIABLE_WINDOWS;
+            if (reliableWindow < currentWindow || reliableWindow >= currentWindow + PEER_FREE_RELIABLE_WINDOWS - 1) return true;
+            return false;
+        }
+
+        private void HandleUnsequenced(ENetPeer peer, ENetProtocolSendUnsequenced packet, byte[] data)
+        {
+
         }
 
         private unsafe void SendAcks()
