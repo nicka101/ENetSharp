@@ -6,11 +6,9 @@ using ENetSharp.Protocol;
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 
 namespace ENetSharp
@@ -30,9 +28,8 @@ namespace ENetSharp
         private bool shuttingDown = false;
         private ManualResetEventSlim shutdownComplete = new ManualResetEventSlim(false);
         private readonly ushort PeerCount;
-        private ConcurrentDictionary<ushort, ENetPeer> Peers;
-        private ConcurrentDictionary<byte, ENetChannel> Channels;
-        private ConcurrentQueue<ushort> AvailablePeerIds = new ConcurrentQueue<ushort>();
+        private readonly ConcurrentDictionary<ushort, ENetPeer> Peers = new ConcurrentDictionary<ushort, ENetPeer>();
+        private readonly ConcurrentQueue<ushort> AvailablePeerIds = new ConcurrentQueue<ushort>();
         internal readonly ENetChannelTypeLayout ChannelLayout;
 
         public delegate void ConnectHandler(ENetPeer peer);
@@ -80,16 +77,16 @@ namespace ENetSharp
             ushort flag = (ushort)(header.PeerID & PROTOCOL_HEADER_FLAG_MASK);
             header.PeerID &= unchecked((ushort)~(uint)PROTOCOL_HEADER_FLAG_MASK);
 
-            Nullable<ENetPeer> peer = null;
+            ENetPeer? peer = null;
             if (header.PeerID != PROTOCOL_MAXIMUM_PEER_ID) //peer remains null if the first command is expected to be a connect
             {
                 try
                 {
                     peer = Peers[header.PeerID];
-                    if (peer.Value.State == ENetPeerState.DISCONNECTED || 
-                        peer.Value.State == ENetPeerState.ZOMBIE ||
+                    if (peer.Value.State == ENetPeerState.Disconnected || 
+                        peer.Value.State == ENetPeerState.Zombie ||
                         //Don't include ENET_HOST_BROADCAST, it's meant for clients broadcasting the connect packet and communicating with any server that responds
-                        peer.Value.Address != fromAddr /* && peer.Value.Address != ENET_HOST_BROADCAST */)
+                        !peer.Value.Address.Equals(fromAddr) /* && peer.Value.Address != ENET_HOST_BROADCAST */)
                     {
                         goto finalPacket; //The peer is disconnected, dead or the packets origin doesn't match the peer - Ignore them
                     }
@@ -152,7 +149,7 @@ namespace ENetSharp
                         byte[] fragmentData = new byte[packet.SendFragment.DataLength];
                         Marshal.Copy(dataStart + currentDataOffset, fragmentData, 0, packet.SendFragment.DataLength);
                         currentDataOffset += packet.SendFragment.DataLength;
-                        HandleFragment(peer.Value, packet.SendFragment, fragmentData);
+                        HandleReliable(peer.Value, packet, true, fragmentData);
                         break;
                     case ENetCommand.SEND_RELIABLE:
                         Util.ToHostOrder(ref packet.SendReliable.DataLength);
@@ -164,7 +161,7 @@ namespace ENetSharp
                         byte[] reliableData = new byte[packet.SendReliable.DataLength];
                         Marshal.Copy(dataStart + currentDataOffset, reliableData, 0, packet.SendReliable.DataLength);
                         currentDataOffset += packet.SendReliable.DataLength;
-                        HandleReliable(peer.Value, packet.SendReliable, reliableData);
+                        HandleReliable(peer.Value, packet, false, reliableData);
                         break;
                     case ENetCommand.SEND_UNRELIABLE:
                         Util.ToHostOrder(ref packet.SendUnreliable.DataLength);
@@ -224,48 +221,64 @@ namespace ENetSharp
 
         internal Object connectionLock = new Object();
 
-        private Nullable<ENetPeer> HandleConnect(IPEndPoint from, ENetProtocolConnect packet)
+        private ENetPeer? HandleConnect(IPEndPoint from, ENetProtocolConnect packet)
         {
             lock (connectionLock)
             {
                 foreach (var peer in Peers)
                 {
-                    if (peer.Value.Address == from && peer.Value.SessionID == packet.SessionID) return null;
+                    if (peer.Value.Address.Equals(from) && peer.Value.SessionID == packet.SessionID) return null;
                 }
-                ushort peerID;
-                if (!AvailablePeerIds.TryDequeue(out peerID)) return null; //No peers available within the client limit
-                ENetPeer newPeer = new ENetPeer(from, peerID, packet, ChannelLayout);
-                ((IDictionary)Peers).Add(peerID, newPeer);
+                ushort peerId;
+                if (!AvailablePeerIds.TryDequeue(out peerId)) return null; //No peers available within the client limit
+                ENetPeer newPeer = new ENetPeer(from, peerId, packet, ChannelLayout);
+                ((IDictionary)Peers).Add(peerId, newPeer);
                 return newPeer;
             }
         }
 
-        private void HandleReliable(ENetPeer peer, ENetProtocolSendReliable packet, byte[] data)
+        private void HandleReliable(ENetPeer peer, ENetProtocol packet, bool isFragment, byte[] data)
         {
-            if (peer.State != ENetPeerState.CONNECTED && peer.State != ENetPeerState.DISCONNECT_LATER) return;
-            if (DropSequencedData(packet.Header)) return;
-        }
-
-        private void HandleFragment(ENetPeer peer, ENetProtocolSendFragment packet, byte[] data)
-        {
-            if (peer.State != ENetPeerState.CONNECTED && peer.State != ENetPeerState.DISCONNECT_LATER) return;
-            if (DropSequencedData(packet.Header)) return;
+            if (peer.State != ENetPeerState.Connected && peer.State != ENetPeerState.DisconnectLater) return;
+            var channel = peer.Channels[packet.Header.ChannelID];
+            if (DropSequencedData(channel, packet.Header) || packet.Header.ReliableSequenceNumber == channel.IncomingSequenceNumber) return;
+            if (!isFragment && packet.Header.ReliableSequenceNumber == (channel.IncomingSequenceNumber + 1))
+            {
+                if (OnData != null) OnData(peer, data);
+                channel.IncomingSequenceNumber++;
+                return;
+            }
+            lock (channel.IncomingCommandLock)
+            {
+                var command = new ENetIncomingCommand(packet.Header.ReliableSequenceNumber);
+                var existingCommand = channel.IncomingCommands.Find(command); //Establish if we already have the packet
+                if (existingCommand != null && !isFragment) return; //We already have the command, ignore it
+                else if (existingCommand != null)
+                {
+                    if (existingCommand.Value.FragmentsRemaining == 0) return;
+                }
+                if (isFragment)
+                {
+                    command.FragmentsRemaining = packet.SendFragment.FragmentCount - 1;
+                }
+                if(packet.Header.ReliableSequenceNumber == (channel.IncomingSequenceNumber + 1))channel.IncomingCommands.AddFirst()
+            }
         }
 
         private void HandleUnreliable(ENetPeer peer, ENetProtocolSendUnreliable packet, byte[] data)
         {
-            if (peer.State != ENetPeerState.CONNECTED && peer.State != ENetPeerState.DISCONNECT_LATER) return;
-            if (DropSequencedData(packet.Header)) return;
+            if (peer.State != ENetPeerState.Connected && peer.State != ENetPeerState.DisconnectLater) return;
+            var channel = peer.Channels[packet.Header.ChannelID];
+            if (DropSequencedData(channel, packet.Header) || packet.UnreliableSequenceNumber <= channel.IncomingSequenceNumber) return;
+
         }
 
-        bool DropSequencedData(ENetProtocolCommandHeader header)
+        bool DropSequencedData(ENetChannel channel, ENetProtocolCommandHeader header)
         {
-            ENetChannel channel = Channels[header.ChannelID];
             ushort reliableWindow = (ushort)(header.ReliableSequenceNumber / PEER_RELIABLE_WINDOW_SIZE);
             ushort currentWindow = (ushort)(channel.IncomingSequenceNumber / PEER_RELIABLE_WINDOW_SIZE);
             if (header.ReliableSequenceNumber < channel.IncomingSequenceNumber) reliableWindow += PEER_RELIABLE_WINDOWS;
-            if (reliableWindow < currentWindow || reliableWindow >= currentWindow + PEER_FREE_RELIABLE_WINDOWS - 1) return true;
-            return false;
+            return reliableWindow < currentWindow || reliableWindow >= currentWindow + PEER_FREE_RELIABLE_WINDOWS - 1;
         }
 
         private void HandleUnsequenced(ENetPeer peer, ENetProtocolSendUnsequenced packet, byte[] data)
@@ -273,11 +286,9 @@ namespace ENetSharp
 
         }
 
-        private unsafe void SendAcks()
+        private void SendAcks()
         {
-            foreach(var peer in Peers.Values){
-                peer.SendAcks();
-            }
+            foreach(var peer in Peers.Values) peer.SendAcks();
         }
 
         #endregion

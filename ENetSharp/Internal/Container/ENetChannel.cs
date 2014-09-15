@@ -10,14 +10,16 @@ namespace ENetSharp.Internal.Container
 {
     internal class ENetChannel
     {
-        internal Object SendLock = new Object();
+        internal object SendLock = new object();
         internal ManualResetEventSlim ProceedReliable = new ManualResetEventSlim(true);
+        internal object IncomingCommandLock = new object();
+
         internal ENetSendType SendType;
         internal ushort OutgoingSequenceNumber = 0;
         internal ushort UsedReliableWindows = 0;
-        internal ushort ReliableWindows [ENET_PEER_RELIABLE_WINDOWS];
+        internal ushort ReliableWindows [ENetHost.PEER_RELIABLE_WINDOWS];
         internal ushort IncomingSequenceNumber = 0;
-        ENetList IncomingCommands;
+        internal LinkedList<ENetIncomingCommand> IncomingCommands;
 
         internal ENetChannel(ENetSendType SendType){
             this.SendType = SendType;

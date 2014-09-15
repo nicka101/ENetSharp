@@ -8,15 +8,15 @@ namespace ENetSharp.Protocol
 {
     public enum ENetPeerState
     {
-        DISCONNECTED = 0, //Not sure I need this if I plan to remove the ENetPeer if it isn't being used
-        CONNECTING = 1,
-        ACKNOWLEDGING_CONNECT = 2,
-        CONNECTION_PENDING = 3,
-        CONNECTION_SUCCEEDED = 4,
-        CONNECTED = 5,
-        DISCONNECT_LATER = 6,
-        DISCONNECTING = 7,
-        ACKNOWLEDGING_DISCONNECT = 8,
-        ZOMBIE = 9
+        Disconnected = 0, //Not sure I need this if I plan to remove the ENetPeer if it isn't being used
+        Connecting = 1,
+        AcknowledgingConnect = 2,
+        ConnectionPending = 3,
+        ConnectionSucceeded = 4,
+        Connected = 5,
+        DisconnectLater = 6,
+        Disconnecting = 7,
+        AcknowledgingDisconnect = 8,
+        Zombie = 9
     }
 }

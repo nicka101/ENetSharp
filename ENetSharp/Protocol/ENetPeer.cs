@@ -27,8 +27,8 @@ namespace ENetSharp.Protocol
         internal ushort IncomingPeerID;
         internal readonly uint SessionID;
         public readonly IPEndPoint Address;            /**< Internet address of the peer */
-        public ENetPeerState State = ENetPeerState.ACKNOWLEDGING_CONNECT;
-        internal ENetChannel[] Channels;
+        public ENetPeerState State = ENetPeerState.AcknowledgingConnect;
+        internal ConcurrentDictionary<byte, ENetChannel> Channels;
         //internal uint IncomingBandwidth;  /**< Downstream bandwidth of the client in bytes/second */
         //internal uint OutgoingBandwidth;  /**< Upstream bandwidth of the client in bytes/second */
         //internal uint IncomingBandwidthThrottleEpoch;
@@ -82,8 +82,8 @@ namespace ENetSharp.Protocol
             this.OutgoingPeerID = packet.OutgoingPeerID;
             this.IncomingPeerID = IncomingPeerID;
             this.WindowSize = PROTOCOL_MAXIMUM_WINDOW_SIZE > packet.WindowSize ? packet.WindowSize : PROTOCOL_MAXIMUM_WINDOW_SIZE;
-            this.Channels = new ENetChannel[channelLayout.ChannelCount()];
-            for(byte i = 0; i < Channels.Length; i++){
+            this.Channels = new ConcurrentDictionary<byte, ENetChannel>();
+            for(byte i = 0; i < channelLayout.ChannelCount(); i++){
                 Channels[i] = new ENetChannel(channelLayout[i]);
             }
         }
@@ -105,7 +105,7 @@ namespace ENetSharp.Protocol
         }
 
         internal void SendAcks(){
-            if(State == ENetPeerState.DISCONNECTED || State == ENetPeerState.ZOMBIE) return;
+            if(State == ENetPeerState.Disconnected || State == ENetPeerState.Zombie) return;
             ENetProtocolAcknowledge ack;
             int headerSize = sizeof(ENetProtocolHeader);
             int ackSize = ENetCommand.ACKNOWLEDGE.Size();
@@ -124,7 +124,7 @@ namespace ENetSharp.Protocol
         }
 
         public bool Send(byte channelID, ENetPacket packet){
-            if(State != ENetPeerState.CONNECTED || channelID > Channels.Length) return false;
+            if(State != ENetPeerState.Connected || channelID > Channels.Count) return false;
             if(packet.Data.Length > FragmentLength){ //Packet bigger than MTU, fragment it
                 ushort sequenceNo = Util.ToNetOrder((ushort)(OutgoingReliableSequenceNumber + 1));
                 uint fragCount = Util.ToNetOrder((uint)((packet.Data.Length + FragmentLength - 1) / FragmentLength));

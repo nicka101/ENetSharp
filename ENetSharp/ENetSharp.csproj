@@ -20,6 +20,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -28,6 +29,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -41,6 +43,10 @@
   <ItemGroup>
     <Compile Include="Container\ENetChannelTypeLayout.cs" />
     <Compile Include="ENetHost.cs" />
+    <Compile Include="Internal\Container\ENetCompleteData.cs" />
+    <Compile Include="Internal\Container\ENetFragmentData.cs" />
+    <Compile Include="Internal\Container\ENetIncomingCommand.cs" />
+    <Compile Include="Internal\Container\IENetDummy.cs" />
     <Compile Include="Internal\Container\OutgoingCommand.cs" />
     <Compile Include="Internal\Protocol\ENetCommand.cs" />
     <Compile Include="Internal\Protocol\ENetProtocol.cs" />
