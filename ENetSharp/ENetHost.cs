@@ -82,8 +82,9 @@ namespace ENetSharp
             ENetProtocolHeader header = (ENetProtocolHeader)Marshal.PtrToStructure(dataStart, typeof(ENetProtocolHeader));
             Util.ToHostOrder(ref header.PeerID);
 
-            ushort flags = (ushort)(header.PeerID & PROTOCOL_HEADER_FLAG_MASK);
-            header.PeerID &= unchecked((ushort)~(uint)PROTOCOL_HEADER_FLAG_MASK);
+            ushort flags = (ushort) (header.PeerID & PROTOCOL_HEADER_FLAG_MASK);
+            byte sessionId = (byte) ((header.PeerID & PROTOCOL_HEADER_SESSION_MASK) >> PROTOCOL_HEADER_SESSION_SHIFT);
+            header.PeerID &= unchecked((ushort) ~(PROTOCOL_HEADER_FLAG_MASK | PROTOCOL_HEADER_SESSION_MASK));
 
             ENetPeer? peer = null;
             if (header.PeerID != PROTOCOL_MAXIMUM_PEER_ID) //peer remains null if the first command is expected to be a connect
@@ -104,17 +105,23 @@ namespace ENetSharp
                     goto finalPacket; //The client doesn't exist and this doesn't follow connection protocol - Ignore them
                 }
             }
+
             int currentDataOffset = ((flags & PROTOCOL_HEADER_FLAG_SENT_TIME) != 0) ? sizeof(ENetProtocolHeader) : sizeof(ENetProtocolHeader) - 2; //sentTime is 2 bytes
+            
             while (currentDataOffset < data.Length)
             {
                 ENetProtocol packet = (ENetProtocol)Marshal.PtrToStructure(dataStart + currentDataOffset, typeof(ENetProtocol));
                 Util.ToHostOrder(ref packet.Header.ReliableSequenceNumber);
-                if (packet.Header.ChannelID >= ChannelLayout.ChannelCount()) continue;
+
+
                 ENetCommand command = (ENetCommand)(packet.Header.Command & (byte)ENetCommand.COMMAND_MASK);
-                if(command >= ENetCommand.COUNT) continue;
-                if (peer == null && command != ENetCommand.CONNECT) return; //Peer was following connection protocol but didn't send the connect first
                 currentDataOffset += command.Size();
-                if (currentDataOffset > data.Length) return; //The ENetCommand is larger than the remaining data
+
+                if (packet.Header.ChannelID >= ChannelLayout.ChannelCount()) continue;
+
+                if (command >= ENetCommand.COUNT) return;                   // Nonexistant or not-implemented commands
+                if (peer == null && command != ENetCommand.CONNECT) return; //Peer was following connection protocol but didn't send the connect first
+                if (currentDataOffset > data.Length) return;                //The ENetCommand is larger than the remaining data
                 switch (command)
                 {
                     case ENetCommand.ACKNOWLEDGE:
