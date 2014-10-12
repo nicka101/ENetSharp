@@ -15,8 +15,13 @@ namespace ENetSharp
 {
     public class ENetHost : IDisposable
     {
-        internal const ushort PROTOCOL_HEADER_FLAG_MASK = 0x2980;
-        internal const ushort PROTOCOL_HEADER_FLAG_SENT_TIME = 0x80;
+        internal const ushort PROTOCOL_HEADER_FLAG_SENT_TIME = 1 << 15;
+        internal const ushort PROTOCOL_HEADER_FLAG_COMPRESSED = 1 << 14;
+        internal const ushort PROTOCOL_HEADER_FLAG_MASK = PROTOCOL_HEADER_FLAG_SENT_TIME | PROTOCOL_HEADER_FLAG_COMPRESSED;
+
+        internal const ushort PROTOCOL_HEADER_SESSION_SHIFT = 12;
+        internal const ushort PROTOCOL_HEADER_SESSION_MASK = 3 << PROTOCOL_HEADER_SESSION_SHIFT;
+
         internal const byte PROTOCOL_MINIMUM_CHANNEL_COUNT = 1;
         internal const byte PROTOCOL_MAXIMUM_CHANNEL_COUNT = 255;
         internal const int PROTOCOL_MAXIMUM_PEER_ID = 0x007F;
@@ -67,6 +72,8 @@ namespace ENetSharp
         {
             IPEndPoint fromAddr = new IPEndPoint(IPAddress.Any, 0);
             byte[] data = connection.EndReceive(ar, ref fromAddr);
+
+            // Queue the next datagram
             if (!shuttingDown) connection.BeginReceive(ReceiveDatagram, null);
 
             #region "ENet Structure Handling"
@@ -74,7 +81,8 @@ namespace ENetSharp
             IntPtr dataStart = handle.AddrOfPinnedObject();
             ENetProtocolHeader header = (ENetProtocolHeader)Marshal.PtrToStructure(dataStart, typeof(ENetProtocolHeader));
             Util.ToHostOrder(ref header.PeerID);
-            ushort flag = (ushort)(header.PeerID & PROTOCOL_HEADER_FLAG_MASK);
+
+            ushort flags = (ushort)(header.PeerID & PROTOCOL_HEADER_FLAG_MASK);
             header.PeerID &= unchecked((ushort)~(uint)PROTOCOL_HEADER_FLAG_MASK);
 
             ENetPeer? peer = null;
@@ -96,7 +104,7 @@ namespace ENetSharp
                     goto finalPacket; //The client doesn't exist and this doesn't follow connection protocol - Ignore them
                 }
             }
-            int currentDataOffset = ((flag & PROTOCOL_HEADER_FLAG_SENT_TIME) != 0) ? sizeof(ENetProtocolHeader) : sizeof(ENetProtocolHeader) - 2; //sentTime is 2 bytes
+            int currentDataOffset = ((flags & PROTOCOL_HEADER_FLAG_SENT_TIME) != 0) ? sizeof(ENetProtocolHeader) : sizeof(ENetProtocolHeader) - 2; //sentTime is 2 bytes
             while (currentDataOffset < data.Length)
             {
                 ENetProtocol packet = (ENetProtocol)Marshal.PtrToStructure(dataStart + currentDataOffset, typeof(ENetProtocol));
