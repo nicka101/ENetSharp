@@ -114,14 +114,15 @@ namespace ENetSharp
                 Util.ToHostOrder(ref packet.Header.ReliableSequenceNumber);
 
 
-                ENetCommand command = (ENetCommand)(packet.Header.Command & (byte)ENetCommand.COMMAND_MASK);
+                ENetCommand command = (ENetCommand)(packet.Header.Command & (byte)ENetCommand.COMMAND_MASK); // TODO: ACKNOWLEDGE and UNSEQUENCED flag handling
                 currentDataOffset += command.Size();
 
-                if (packet.Header.ChannelID >= ChannelLayout.ChannelCount()) continue;
+                if (packet.Header.ChannelID >= ChannelLayout.ChannelCount()) continue; // Skip invalid command
 
                 if (command >= ENetCommand.COUNT) return;                   // Nonexistant or not-implemented commands
                 if (peer == null && command != ENetCommand.CONNECT) return; //Peer was following connection protocol but didn't send the connect first
                 if (currentDataOffset > data.Length) return;                //The ENetCommand is larger than the remaining data
+                
                 switch (command)
                 {
                     case ENetCommand.ACKNOWLEDGE:
@@ -225,7 +226,8 @@ namespace ENetSharp
                         goto finalPacket;
                 }
             }
-            finalPacket:
+
+        finalPacket:
             handle.Free();
             #endregion
 
@@ -276,7 +278,7 @@ namespace ENetSharp
                 {
                     command.FragmentsRemaining = packet.SendFragment.FragmentCount - 1;
                 }
-                if(packet.Header.ReliableSequenceNumber == (channel.IncomingSequenceNumber + 1))channel.IncomingCommands.AddFirst()
+                if (packet.Header.ReliableSequenceNumber == (channel.IncomingSequenceNumber + 1)) channel.IncomingCommands.AddFirst();
             }
         }
 
