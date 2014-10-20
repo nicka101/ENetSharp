@@ -23,6 +23,9 @@ namespace ENetSharp.Internal.Protocol
         THROTTLE_CONFIGURE = 11,
         COUNT = 12,
 
+        FLAG_ACKNOWLEDGE = 1 << 7,
+        FLAG_UNRELIABLE = 1 << 6,
+
         PROTOCOL_HEADER = 17,
         COMMAND_MASK = 0x0F
     }
