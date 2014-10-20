@@ -15,23 +15,35 @@ namespace ENetSharp
 {
     public class ENetHost : IDisposable
     {
+        #region Protocol Header
         internal const ushort PROTOCOL_HEADER_FLAG_SENT_TIME = 1 << 15;
-        internal const ushort PROTOCOL_HEADER_FLAG_COMPRESSED = 1 << 14;
-        internal const ushort PROTOCOL_HEADER_FLAG_MASK = PROTOCOL_HEADER_FLAG_SENT_TIME | PROTOCOL_HEADER_FLAG_COMPRESSED;
+        //internal const ushort PROTOCOL_HEADER_FLAG_COMPRESSED = 1 << 14;
+        internal const ushort PROTOCOL_HEADER_FLAG_MASK = PROTOCOL_HEADER_FLAG_SENT_TIME; //| PROTOCOL_HEADER_FLAG_COMPRESSED;
 
         internal const ushort PROTOCOL_HEADER_SESSION_SHIFT = 12;
         internal const ushort PROTOCOL_HEADER_SESSION_MASK = 3 << PROTOCOL_HEADER_SESSION_SHIFT;
+        #endregion
 
+        #region Protocol Command Header
+        internal const byte PROTOCOL_COMMAND_FLAG_ACKNOWLEDGE = 1 << 7;
+        internal const byte PROTOCOL_COMMAND_FLAG_UNSEQUENCED = 1 << 6;
+
+        internal const byte PROTOCOL_COMMAND_ID_MASK = 0xf;
+        #endregion
+
+        #region Protocol Constants
         internal const byte PROTOCOL_MINIMUM_CHANNEL_COUNT = 1;
         internal const byte PROTOCOL_MAXIMUM_CHANNEL_COUNT = 255;
         internal const int PROTOCOL_MAXIMUM_PEER_ID = 0x007F;
         internal const ushort PEER_RELIABLE_WINDOW_SIZE = 0x1000;
         internal const ushort PEER_RELIABLE_WINDOWS = 16;
         internal const ushort PEER_FREE_RELIABLE_WINDOWS = 8;
+        #endregion
 
         private UdpClient connection;
         private bool shuttingDown = false;
         private ManualResetEventSlim shutdownComplete = new ManualResetEventSlim(false);
+        
         private readonly ushort PeerCount;
         private readonly ConcurrentDictionary<ushort, ENetPeer> Peers = new ConcurrentDictionary<ushort, ENetPeer>();
         private readonly ConcurrentQueue<ushort> AvailablePeerIds = new ConcurrentQueue<ushort>();
