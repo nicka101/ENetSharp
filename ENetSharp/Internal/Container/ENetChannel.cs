@@ -1,5 +1,6 @@
 ﻿using ENetSharp.Protocol;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -17,7 +18,8 @@ namespace ENetSharp.Internal.Container
         internal ENetSendType SendType;
         internal ushort OutgoingSequenceNumber = 0;
         internal ushort UsedReliableWindows = 0;
-        internal ushort ReliableWindows [ENetHost.PEER_RELIABLE_WINDOWS];
+        internal BitArray ReliableWindows = new BitArray(ENetHost.PEER_RELIABLE_WINDOWS);
+        //internal ushort ReliableWindows [ENetHost.PEER_RELIABLE_WINDOWS];
         internal ushort IncomingSequenceNumber = 0;
         internal LinkedList<ENetIncomingCommand> IncomingCommands;
 

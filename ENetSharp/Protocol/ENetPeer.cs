@@ -28,7 +28,7 @@ namespace ENetSharp.Protocol
         internal readonly uint SessionID;
         public readonly IPEndPoint Address;            /**< Internet address of the peer */
         public ENetPeerState State = ENetPeerState.AcknowledgingConnect;
-        internal ConcurrentDictionary<byte, ENetChannel> Channels;
+        internal ENetChannel[] Channels;
         //internal uint IncomingBandwidth;  /**< Downstream bandwidth of the client in bytes/second */
         //internal uint OutgoingBandwidth;  /**< Upstream bandwidth of the client in bytes/second */
         //internal uint IncomingBandwidthThrottleEpoch;
@@ -74,7 +74,7 @@ namespace ENetSharp.Protocol
         internal fixed uint UnsequencedWindow [ENET_PEER_UNSEQUENCED_WINDOW_SIZE / 32]; 
         internal uint DisconnectData = 0;
 
-        internal ENetPeer(IPEndPoint Address, ushort IncomingPeerID, ENetProtocolConnect packet, ENetChannelTypeLayout channelLayout){
+        internal ENetPeer(IPEndPoint Address, ushort IncomingPeerID, ENetProtocolConnect packet, byte channelCount){
             this.Address = Address;
             this.SessionID = packet.SessionID;
             this.MTU = packet.MTU < PROTOCOL_MINIMUM_MTU ? PROTOCOL_MINIMUM_MTU : packet.MTU > PROTOCOL_MAXIMUM_MTU ? PROTOCOL_MAXIMUM_MTU : packet.MTU;
@@ -82,9 +82,9 @@ namespace ENetSharp.Protocol
             this.OutgoingPeerID = packet.OutgoingPeerID;
             this.IncomingPeerID = IncomingPeerID;
             this.WindowSize = PROTOCOL_MAXIMUM_WINDOW_SIZE > packet.WindowSize ? packet.WindowSize : PROTOCOL_MAXIMUM_WINDOW_SIZE;
-            this.Channels = new ConcurrentDictionary<byte, ENetChannel>();
-            for(byte i = 0; i < channelLayout.ChannelCount(); i++){
-                Channels[i] = new ENetChannel(channelLayout[i]);
+            this.Channels = new ENetChannel[channelCount]
+            for(byte i = 0; i < channelCount; i++){
+                Channels[i] = new ENetChannel();
             }
         }
 

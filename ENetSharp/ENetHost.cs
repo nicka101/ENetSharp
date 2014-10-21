@@ -24,13 +24,6 @@ namespace ENetSharp
         internal const ushort PROTOCOL_HEADER_SESSION_MASK = 3 << PROTOCOL_HEADER_SESSION_SHIFT;
         #endregion
 
-        #region Protocol Command Header
-        internal const byte PROTOCOL_COMMAND_FLAG_ACKNOWLEDGE = 1 << 7;
-        internal const byte PROTOCOL_COMMAND_FLAG_UNSEQUENCED = 1 << 6;
-
-        internal const byte PROTOCOL_COMMAND_ID_MASK = 0xf;
-        #endregion
-
         #region Protocol Constants
         internal const byte PROTOCOL_MINIMUM_CHANNEL_COUNT = 1;
         internal const byte PROTOCOL_MAXIMUM_CHANNEL_COUNT = 255;
@@ -43,11 +36,10 @@ namespace ENetSharp
         private UdpClient connection;
         private bool shuttingDown = false;
         private ManualResetEventSlim shutdownComplete = new ManualResetEventSlim(false);
-        
+
         private readonly ushort PeerCount;
         private readonly ConcurrentDictionary<ushort, ENetPeer> Peers = new ConcurrentDictionary<ushort, ENetPeer>();
         private readonly ConcurrentQueue<ushort> AvailablePeerIds = new ConcurrentQueue<ushort>();
-        internal readonly ENetChannelTypeLayout ChannelLayout;
 
         public delegate void ConnectHandler(ENetPeer peer);
         public delegate void DisconnectHandler(ENetPeer peer);
@@ -57,12 +49,14 @@ namespace ENetSharp
         public event DisconnectHandler OnDisconnect;
         public event DataHandler OnData;
 
-        public ENetHost(IPEndPoint listenAddress, ushort peerCount, ENetChannelTypeLayout channelLayout)
+        public ENetHost(IPEndPoint listenAddress, ushort peerCount)
         {
             if (peerCount > PROTOCOL_MAXIMUM_PEER_ID) throw new ArgumentException("The given peer count exceeds the protocol maximum of " + PROTOCOL_MAXIMUM_PEER_ID);
-            PeerCount = peerCount;
-            ChannelLayout = channelLayout;
-            connection = new UdpClient(listenAddress);
+
+
+            this.PeerCount = peerCount;
+            this.connection = new UdpClient(listenAddress);
+
             for (ushort i = 1; i <= peerCount; i++)
             {
                 AvailablePeerIds.Enqueue(i);
@@ -129,7 +123,7 @@ namespace ENetSharp
                 ENetCommand command = (ENetCommand)(packet.Header.Command & (byte)ENetCommand.COMMAND_MASK); // TODO: ACKNOWLEDGE and UNSEQUENCED flag handling
                 currentDataOffset += command.Size();
 
-                if (packet.Header.ChannelID >= ChannelLayout.ChannelCount()) continue; // Skip invalid command
+                //if (packet.Header.ChannelID >= channelCount) continue; // Skip invalid command
 
                 if (command >= ENetCommand.COUNT) return;                   // Nonexistant or not-implemented commands
                 if (peer == null && command != ENetCommand.CONNECT) return; //Peer was following connection protocol but didn't send the connect first
@@ -142,11 +136,13 @@ namespace ENetSharp
                         Util.ToHostOrder(ref packet.Acknowledge.ReceivedSentTime);
                         //TODO: Handle Acknowledge
                         break;
+
                     case ENetCommand.BANDWIDTH_LIMIT:
                         Util.ToHostOrder(ref packet.BandwidthLimit.IncomingBandwidth);
                         Util.ToHostOrder(ref packet.BandwidthLimit.OutgoingBandwidth);
                         //TODO: Handle Bandwidth Limit
                         break;
+
                     case ENetCommand.CONNECT:
                         Console.WriteLine("A connected peer sent a connect packet. WTF are they doing?");
                         Util.ToHostOrder(ref packet.Connect.MTU);
@@ -158,71 +154,73 @@ namespace ENetSharp
                         Util.ToHostOrder(ref packet.Connect.PacketThrottleAcceleration);
                         Util.ToHostOrder(ref packet.Connect.PacketThrottleDeceleration);
                         Util.ToHostOrder(ref packet.Connect.SessionID);
+
                         peer = HandleConnect(fromAddr, packet.Connect);
                         break;
+
                     case ENetCommand.DISCONNECT:
                         Util.ToHostOrder(ref packet.Disconnect.Data);
                         //TODO: Handle Disconnect
                         break;
+
                     case ENetCommand.PING:
                         //Ping has no handling in the real ENet
                         break;
+
                     case ENetCommand.SEND_FRAGMENT:
-                        Util.ToHostOrder(ref packet.SendFragment.DataLength); //We have to assume the fragment is the right type for the channel until I figure out how it indicates it
+                        Util.ToHostOrder(ref packet.SendFragment.DataLength);
                         Util.ToHostOrder(ref packet.SendFragment.StartSequenceNumber);
                         Util.ToHostOrder(ref packet.SendFragment.FragmentCount);
                         Util.ToHostOrder(ref packet.SendFragment.FragmentNumber);
                         Util.ToHostOrder(ref packet.SendFragment.TotalLength);
                         Util.ToHostOrder(ref packet.SendFragment.FragmentOffset);
+
                         byte[] fragmentData = new byte[packet.SendFragment.DataLength];
                         Marshal.Copy(dataStart + currentDataOffset, fragmentData, 0, packet.SendFragment.DataLength);
+
                         currentDataOffset += packet.SendFragment.DataLength;
                         HandleReliable(peer.Value, packet, true, fragmentData);
                         break;
+
                     case ENetCommand.SEND_RELIABLE:
                         Util.ToHostOrder(ref packet.SendReliable.DataLength);
-                        if ((ChannelLayout[packet.Header.ChannelID] & ENetSendType.RELIABLE) == 0) //Each of the data handlers uses this to quickly discard any data not matching the channels send type
-                        {
-                            currentDataOffset += packet.SendReliable.DataLength;
-                            break;
-                        }
+
                         byte[] reliableData = new byte[packet.SendReliable.DataLength];
                         Marshal.Copy(dataStart + currentDataOffset, reliableData, 0, packet.SendReliable.DataLength);
+
                         currentDataOffset += packet.SendReliable.DataLength;
                         HandleReliable(peer.Value, packet, false, reliableData);
                         break;
+
                     case ENetCommand.SEND_UNRELIABLE:
                         Util.ToHostOrder(ref packet.SendUnreliable.DataLength);
-                        if ((ChannelLayout[packet.Header.ChannelID] & ENetSendType.UNRELIABLE) == 0)
-                        {
-                            currentDataOffset += packet.SendUnreliable.DataLength;
-                            break;
-                        }
                         Util.ToHostOrder(ref packet.SendUnreliable.UnreliableSequenceNumber);
+
                         byte[] unreliableData = new byte[packet.SendUnreliable.DataLength];
                         Marshal.Copy(dataStart + currentDataOffset, unreliableData, 0, packet.SendUnreliable.DataLength);
+
                         currentDataOffset += packet.SendUnreliable.DataLength;
                         HandleUnreliable(peer.Value, packet.SendUnreliable, unreliableData);
                         break;
+
                     case ENetCommand.SEND_UNSEQUENCED:
                         Util.ToHostOrder(ref packet.SendUnsequenced.DataLength);
-                        if ((ChannelLayout[packet.Header.ChannelID] & ENetSendType.UNSEQUENCED) == 0)
-                        {
-                            currentDataOffset += packet.SendUnsequenced.DataLength;
-                            break;
-                        }
                         Util.ToHostOrder(ref packet.SendUnsequenced.UnsequencedGroup);
+
                         byte[] unsequencedData = new byte[packet.SendUnsequenced.DataLength];
                         Marshal.Copy(dataStart + currentDataOffset, unsequencedData, 0, packet.SendUnsequenced.DataLength);
+
                         currentDataOffset += packet.SendUnsequenced.DataLength;
                         HandleUnsequenced(peer.Value, packet.SendUnsequenced, unsequencedData);
                         break;
+
                     case ENetCommand.THROTTLE_CONFIGURE:
                         Util.ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleInterval);
                         Util.ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleAcceleration);
                         Util.ToHostOrder(ref packet.ThrottleConfigure.PacketThrottleDeceleration);
                         //TODO: Handle Throttle Configure
                         break;
+
                     case ENetCommand.VERIFY_CONNECT:
                         Util.ToHostOrder(ref packet.VerifyConnect.MTU);
                         Util.ToHostOrder(ref packet.VerifyConnect.WindowSize);
@@ -234,6 +232,7 @@ namespace ENetSharp
                         Util.ToHostOrder(ref packet.VerifyConnect.PacketThrottleDeceleration);
                         //TODO: Handle Verify Connect
                         break;
+
                     default:
                         goto finalPacket;
                 }
@@ -260,8 +259,9 @@ namespace ENetSharp
                 }
                 ushort peerId;
                 if (!AvailablePeerIds.TryDequeue(out peerId)) return null; //No peers available within the client limit
-                ENetPeer newPeer = new ENetPeer(from, peerId, packet, ChannelLayout);
-                ((IDictionary)Peers).Add(peerId, newPeer);
+                
+                ENetPeer newPeer = new ENetPeer(from, peerId, packet, (byte) packet.ChannelCount);
+                Peers[peerId] = newPeer;
                 return newPeer;
             }
         }
