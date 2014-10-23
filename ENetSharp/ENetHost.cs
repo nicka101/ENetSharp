@@ -259,6 +259,7 @@ namespace ENetSharp
                 }
                 ushort peerId;
                 if (!AvailablePeerIds.TryDequeue(out peerId)) return null; //No peers available within the client limit
+                if (packet.ChannelCount > PROTOCOL_MAXIMUM_CHANNEL_COUNT || packet.ChannelCount < PROTOCOL_MINIMUM_CHANNEL_COUNT) return null;
                 
                 ENetPeer newPeer = new ENetPeer(from, peerId, packet, (byte) packet.ChannelCount);
                 Peers[peerId] = newPeer;
@@ -269,6 +270,8 @@ namespace ENetSharp
         private void HandleReliable(ENetPeer peer, ENetProtocol packet, bool isFragment, byte[] data)
         {
             if (peer.State != ENetPeerState.Connected && peer.State != ENetPeerState.DisconnectLater) return;
+            if (packet.Header.ChannelID >= peer.Channels.Length) return;
+
             var channel = peer.Channels[packet.Header.ChannelID];
             if (DropSequencedData(channel, packet.Header) || packet.Header.ReliableSequenceNumber == channel.IncomingSequenceNumber) return;
             if (!isFragment && packet.Header.ReliableSequenceNumber == (channel.IncomingSequenceNumber + 1))
@@ -297,6 +300,8 @@ namespace ENetSharp
         private void HandleUnreliable(ENetPeer peer, ENetProtocolSendUnreliable packet, byte[] data)
         {
             if (peer.State != ENetPeerState.Connected && peer.State != ENetPeerState.DisconnectLater) return;
+            if (packet.Header.ChannelID >= peer.Channels.Length) return;
+
             var channel = peer.Channels[packet.Header.ChannelID];
             if (DropSequencedData(channel, packet.Header) || packet.UnreliableSequenceNumber <= channel.IncomingSequenceNumber) return;
 
@@ -313,6 +318,7 @@ namespace ENetSharp
         private void HandleUnsequenced(ENetPeer peer, ENetProtocolSendUnsequenced packet, byte[] data)
         {
 
+            if (packet.Header.ChannelID >= peer.Channels.Length) return;
         }
 
         private void SendAcks()
