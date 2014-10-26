@@ -311,8 +311,13 @@ namespace ENetSharp
         {
             ushort reliableWindow = (ushort)(header.ReliableSequenceNumber / PEER_RELIABLE_WINDOW_SIZE);
             ushort currentWindow = (ushort)(channel.IncomingSequenceNumber / PEER_RELIABLE_WINDOW_SIZE);
-            if (header.ReliableSequenceNumber < channel.IncomingSequenceNumber) reliableWindow += PEER_RELIABLE_WINDOWS;
-            return reliableWindow < currentWindow || reliableWindow >= currentWindow + PEER_FREE_RELIABLE_WINDOWS - 1;
+
+            if (header.ReliableSequenceNumber < channel.IncomingSequenceNumber)
+            {
+                reliableWindow += PEER_RELIABLE_WINDOWS; // Account for wrap-around
+            }
+
+            return reliableWindow >= currentWindow + PEER_FREE_RELIABLE_WINDOWS - 1;
         }
 
         private void HandleUnsequenced(ENetPeer peer, ENetProtocolSendUnsequenced packet, byte[] data)
