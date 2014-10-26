@@ -307,6 +307,12 @@ namespace ENetSharp
 
         }
 
+        /// <summary>
+        /// Check if the received packet lies within the free windows (otherwise, packet is assumed to lie in past)
+        /// </summary>
+        /// <param name="channel"></param>
+        /// <param name="header"></param>
+        /// <returns><code>true</code> if the packet comes from the past, <code>false</code> if the packet is within an acceptable window</returns>
         bool DropSequencedData(ENetChannel channel, ENetProtocolCommandHeader header)
         {
             ushort reliableWindow = (ushort)(header.ReliableSequenceNumber / PEER_RELIABLE_WINDOW_SIZE);
